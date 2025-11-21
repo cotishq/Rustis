@@ -1,6 +1,7 @@
 use resp::Value;
 use tokio::net::{TcpListener , TcpStream};
 use anyhow::Result;
+use std::{collections::HashMap, sync::{Arc , Mutex}};
 
 mod resp;
 
@@ -9,14 +10,19 @@ async fn main() {
 
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
 
+    let store = Arc::new(Mutex::new(std::collections::HashMap::<String,String>::new()));
+
     loop {
         let stream = listener.accept().await;
         match stream {
             Ok((stream, _)) => {
                 println!("accepted a new connection");
 
-                tokio::spawn(async move {
-                    handle_conn(stream).await
+                tokio::spawn({
+                    let store = store.clone();
+                    async move {
+                        handle_conn(stream, store).await
+                    }
                 });
             }
             Err(e) => {
@@ -26,7 +32,7 @@ async fn main() {
     }
 }
 
-async fn handle_conn(stream: TcpStream){
+async fn handle_conn(stream: TcpStream , store: Arc<Mutex<HashMap<String,String>>>){
     let mut handler = resp::RespHandler::new(stream);
 
     println!("Starting read loop");
@@ -41,6 +47,29 @@ async fn handle_conn(stream: TcpStream){
             match command.as_str(){
                 "ping" => Value::SimpleString("PONG".to_string()),
                 "echo" => args.first().unwrap().clone(),
+                "set" => {
+                    if args.len() < 2 {
+                        Value::SimpleString("Err wrong number of arguments".into())
+                    } else {
+                        let key = unpack_bulk_str(args[0].clone()).unwrap();
+                        let value = unpack_bulk_str(args[1].clone()).unwrap();
+
+                        store.lock().unwrap().insert(key, value);
+
+                        Value::SimpleString("Ok".to_string())
+                    }
+                }
+
+                "get" => {
+                    let key = unpack_bulk_str(args[0].clone()).unwrap();
+                    let map = store.lock().unwrap();
+
+                    if let Some(v) = map.get(&key) {
+                        Value::BulkString(v.clone())
+                    } else {
+                        Value::BulkString("-1".to_string())
+                    }
+                }
                 c => panic!("Cannot handle command {}" , c),
             }
         } else {
