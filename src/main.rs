@@ -1,16 +1,19 @@
 use resp::Value;
 use tokio::net::{TcpListener , TcpStream};
 use anyhow::Result;
-use std::{collections::HashMap, sync::{Arc , Mutex}};
+use bytes::Bytes;
 
 mod resp;
+mod db;
+
+use db::Db;
 
 #[tokio::main]
 async fn main() {
 
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
 
-    let store = Arc::new(Mutex::new(std::collections::HashMap::<String,String>::new()));
+    let store = Db::new();
 
     loop {
         let stream = listener.accept().await;
@@ -32,7 +35,7 @@ async fn main() {
     }
 }
 
-async fn handle_conn(stream: TcpStream , store: Arc<Mutex<HashMap<String,String>>>){
+async fn handle_conn(stream: TcpStream , store: Db){
     let mut handler = resp::RespHandler::new(stream);
 
     println!("Starting read loop");
@@ -54,20 +57,25 @@ async fn handle_conn(stream: TcpStream , store: Arc<Mutex<HashMap<String,String>
                         let key = unpack_bulk_str(args[0].clone()).unwrap();
                         let value = unpack_bulk_str(args[1].clone()).unwrap();
 
-                        store.lock().unwrap().insert(key, value);
+                        // check optional expiration: SET key value PX 1000
+                        let expire = if args.len() >= 4 && unpack_bulk_str(args[2].clone()).unwrap().to_lowercase() == "px" {
+                            let ms: u64 = unpack_bulk_str(args[3].clone()).unwrap().parse().unwrap();
+                            Some(tokio::time::Duration::from_millis(ms))
+                        } else {
+                            None
+                        };
 
-                        Value::SimpleString("Ok".to_string())
+                        store.set(key, Bytes::from(value), expire);
+
+                        Value::SimpleString("OK".to_string())
                     }
                 }
-
                 "get" => {
                     let key = unpack_bulk_str(args[0].clone()).unwrap();
-                    let map = store.lock().unwrap();
 
-                    if let Some(v) = map.get(&key) {
-                        Value::BulkString(v.clone())
-                    } else {
-                        Value::BulkString("-1".to_string())
+                    match store.get(&key) {
+                        Some(v) => Value::BulkString(String::from_utf8(v.to_vec()).unwrap()),
+                        None => Value::BulkString("-1".into())
                     }
                 }
                 c => panic!("Cannot handle command {}" , c),
