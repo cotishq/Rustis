@@ -37,7 +37,6 @@ impl Db {
             notify: Notify::new(),
         });
 
-        // background expiration cleanup
         tokio::spawn(clean_expired(shared.clone()));
 
         Self { shared }
@@ -45,7 +44,32 @@ impl Db {
 
     /// GET command
     pub fn get(&self, key: &str) -> Option<Bytes> {
-        let state = self.shared.state.lock().unwrap();
+        let mut state = self.shared.state.lock().unwrap();
+        let now = Instant::now();
+        
+        // Check if key has expired
+        let mut expired_instant = None;
+        for (&when, k) in state.expirations.iter() {
+            if k == key {
+                if when <= now {
+                    // Key has expired
+                    expired_instant = Some(when);
+                    break;
+                } else {
+                    // Key exists and is not expired, return it
+                    return state.entries.get(key).cloned();
+                }
+            }
+        }
+        
+        // Remove expired key if found
+        if let Some(when) = expired_instant {
+            state.entries.remove(key);
+            state.expirations.remove(&when);
+            return None;
+        }
+        
+        // Key doesn't have an expiration, return it if it exists
         state.entries.get(key).cloned()
     }
 
@@ -96,21 +120,19 @@ fn purge(shared: &Shared) -> Option<Instant> {
             return Some(when);
         }
 
-        // SAFE: no immutable borrow is active
         state.entries.remove(&key);
         state.expirations.remove(&when);
     }
 }
 
 
-/// Allow Db::default()
 impl Default for Db {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Make Db clonable (Arc clone)
+
 impl Clone for Db {
     fn clone(&self) -> Self {
         Db {

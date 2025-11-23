@@ -57,7 +57,6 @@ async fn handle_conn(stream: TcpStream , store: Db){
                         let key = unpack_bulk_str(args[0].clone()).unwrap();
                         let value = unpack_bulk_str(args[1].clone()).unwrap();
 
-                        // check optional expiration: SET key value PX 1000
                         let expire = if args.len() >= 4 && unpack_bulk_str(args[2].clone()).unwrap().to_lowercase() == "px" {
                             let ms: u64 = unpack_bulk_str(args[3].clone()).unwrap().parse().unwrap();
                             Some(tokio::time::Duration::from_millis(ms))
@@ -75,7 +74,7 @@ async fn handle_conn(stream: TcpStream , store: Db){
 
                     match store.get(&key) {
                         Some(v) => Value::BulkString(String::from_utf8(v.to_vec()).unwrap()),
-                        None => Value::BulkString("-1".into())
+                        None => Value::BulkString("nil".into())
                     }
                 }
                 c => panic!("Cannot handle command {}" , c),
