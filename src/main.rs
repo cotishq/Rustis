@@ -77,6 +77,23 @@ async fn handle_conn(stream: TcpStream , store: Db){
                         None => Value::BulkString("nil".into())
                     }
                 }
+
+                "rpush" => {
+                    if args.len() < 2 {
+                        Value::SimpleString("Err wrong number of arguments".into())
+                    } else {
+                        let key = unpack_bulk_str(args[0].clone()).unwrap();
+                        let values: Vec<Bytes> = args
+                            .iter()
+                            .skip(1)
+                            .map(|v| Bytes::from(unpack_bulk_str(v.clone()).unwrap()))
+                            .collect();
+
+                        let len = store.rpush(key, values);
+                        
+                        Value::Integer(len as i64)
+                    }
+                }
                 c => panic!("Cannot handle command {}" , c),
             }
         } else {

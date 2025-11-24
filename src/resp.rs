@@ -6,6 +6,7 @@ use anyhow::Result;
 pub enum Value {
     SimpleString(String),
     BulkString(String),
+    Integer(i64),
     Array(Vec<Value>),
 }
 
@@ -14,7 +15,8 @@ impl Value {
         match self {
             Value::SimpleString(s) => format!("+{}\r\n", s),
             Value::BulkString(s) => format!("${}\r\n{}\r\n", s.chars().count(), s),
-            _ => panic!("Unsupported value for serialize"),
+            Value::Integer(i) => format!(":{}\r\n", i),
+            Value::Array(_) => panic!("Array serialize not implemented"),
         }
     }
 }

@@ -1,6 +1,5 @@
 use std::{
-    collections::{HashMap, BTreeMap},
-    sync::{Arc, Mutex},
+    collections::{BTreeMap, HashMap}, sync::{Arc, Mutex}
 };
 
 use bytes::Bytes;
@@ -23,6 +22,7 @@ struct Shared {
 /// Actual data + expiration index
 struct State {
     entries: HashMap<String, Bytes>,
+    lists : HashMap<String , Vec<Bytes>>,
     expirations: BTreeMap<Instant, String>,
 }
 
@@ -32,6 +32,7 @@ impl Db {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
                 entries: HashMap::new(),
+                lists : HashMap::new(),
                 expirations: BTreeMap::new(),
             }),
             notify: Notify::new(),
@@ -85,6 +86,21 @@ impl Db {
         state.entries.insert(key, value);
 
         self.shared.notify.notify_one();
+    }
+
+    pub fn rpush(&self , key: String , values: Vec<Bytes>) -> usize {
+        let mut state = self.shared.state.lock().unwrap();
+
+        let list = state.lists.entry(key).or_insert_with(Vec::new);
+
+        for value in values  {
+            list.push(value);
+            
+        }
+
+        let len = list.len() ;
+        self.shared.notify.notify_one();
+        len
     }
 }
 
