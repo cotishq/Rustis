@@ -102,7 +102,29 @@ impl Db {
         self.shared.notify.notify_one();
         len
     }
-}
+
+    pub fn lrange(&self, key: &str, start: i64, end: i64) -> Vec<Bytes> {
+        let state = self.shared.state.lock().unwrap();
+
+        match state.lists.get(key) {
+            Some(list) => {
+                let len = list.len() as i64;
+                let start = if start < 0 { (len + start).max(0) } else { start.min(len) } as usize;
+                let end = if end < 0 { (len + end).max(-1) } else { end.min(len - 1) } as usize;
+
+                if start > end || start >= list.len() {
+                    return vec![];
+                }
+
+                list[start..=end.min(list.len() - 1)].to_vec()
+            }
+            None => vec![],
+        }
+    }
+
+   
+    }
+
 
 /// Background task to remove expired keys
 async fn clean_expired(shared: Arc<Shared>) {

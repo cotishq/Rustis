@@ -78,7 +78,7 @@ async fn handle_conn(stream: TcpStream , store: Db){
                     }
                 }
 
-                "rpush" => {
+                "RPUSH" => {
                     if args.len() < 2 {
                         Value::SimpleString("Err wrong number of arguments".into())
                     } else {
@@ -92,6 +92,23 @@ async fn handle_conn(stream: TcpStream , store: Db){
                         let len = store.rpush(key, values);
                         
                         Value::Integer(len as i64)
+                    }
+                }
+                "LRANGE" => {
+                    if args.len() < 3 {
+                        Value::SimpleString("Err wrong number of arguments".into())
+                    } else {
+                        let key = unpack_bulk_str(args[0].clone()).unwrap();
+                        let start: i64 = unpack_bulk_str(args[1].clone()).unwrap().parse().unwrap();
+                        let end: i64 = unpack_bulk_str(args[2].clone()).unwrap().parse().unwrap();
+
+                        let elements = store.lrange(&key, start, end);
+                        let values: Vec<Value> = elements
+                            .iter()
+                            .map(|b| Value::BulkString(String::from_utf8(b.to_vec()).unwrap()))
+                            .collect();
+
+                        Value::Array(values)
                     }
                 }
                 c => panic!("Cannot handle command {}" , c),

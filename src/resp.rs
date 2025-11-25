@@ -16,7 +16,13 @@ impl Value {
             Value::SimpleString(s) => format!("+{}\r\n", s),
             Value::BulkString(s) => format!("${}\r\n{}\r\n", s.chars().count(), s),
             Value::Integer(i) => format!(":{}\r\n", i),
-            Value::Array(_) => panic!("Array serialize not implemented"),
+            Value::Array(arr) => {
+                let mut result = format!("*{}\r\n", arr.len());
+                for item in arr {
+                    result.push_str(&item.serialize());
+                }
+                result
+            }
         }
     }
 }
