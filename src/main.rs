@@ -1,143 +1,108 @@
-use resp::Value;
-use tokio::net::{TcpListener , TcpStream};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use bytes::BytesMut;
+use bytes::Buf;
 use anyhow::Result;
-use bytes::Bytes;
 
 mod resp;
 mod db;
+mod commands;
 
+use resp::Value;
 use db::Db;
+use commands::dispatch;
 
 #[tokio::main]
 async fn main() {
-
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
+    println!("Rustis server listening on 127.0.0.1:6379");
 
     let store = Db::new();
 
     loop {
-        let stream = listener.accept().await;
-        match stream {
-            Ok((stream, _)) => {
-                println!("accepted a new connection");
+        match listener.accept().await {
+            Ok((stream, addr)) => {
+                println!("New connection from: {}", addr);
+                let db = store.clone();
 
-                tokio::spawn({
-                    let store = store.clone();
-                    async move {
-                        handle_conn(stream, store).await
+                tokio::spawn(async move {
+                    if let Err(e) = handle_connection(stream, db).await {
+                        eprintln!("Connection error: {}", e);
                     }
                 });
             }
             Err(e) => {
-                println!("error: {}", e);
+                eprintln!("Accept error: {}", e);
             }
         }
     }
 }
 
-async fn handle_conn(stream: TcpStream , store: Db){
-    let mut handler = resp::RespHandler::new(stream);
-
-    println!("Starting read loop");
+async fn handle_connection(mut stream: TcpStream, db: Db) -> Result<()> {
+    let mut buffer = BytesMut::with_capacity(512);
 
     loop {
-        let value = handler.read_value().await.unwrap();
+        let n = stream.read_buf(&mut buffer).await?;
 
-        println!("Got value {:?}" , value);
+        if n == 0 {
+            println!("Connection closed");
+            return Ok(());
+        }
 
-        let response = if let Some(v) = value{
-            let (command , args) = extract_command(v).unwrap() ;
-            match command.as_str(){
-                "ping" => Value::SimpleString("PONG".to_string()),
-                "echo" => args.first().unwrap().clone(),
-                "set" => {
-                    if args.len() < 2 {
-                        Value::SimpleString("Err wrong number of arguments".into())
-                    } else {
-                        let key = unpack_bulk_str(args[0].clone()).unwrap();
-                        let value = unpack_bulk_str(args[1].clone()).unwrap();
+        // Parse the RESP message
+        match resp::parse_message(buffer.clone()) {
+            Ok((value, consumed)) => {
+                buffer.advance(consumed);
 
-                        let expire = if args.len() >= 4 && unpack_bulk_str(args[2].clone()).unwrap().to_lowercase() == "px" {
-                            let ms: u64 = unpack_bulk_str(args[3].clone()).unwrap().parse().unwrap();
-                            Some(tokio::time::Duration::from_millis(ms))
-                        } else {
-                            None
-                        };
+                // Extract command and args
+                match extract_command(value) {
+                    Ok((command, args)) => {
+                        println!("Command: {}, Args: {:?}", command, args);
 
-                        store.set(key, Bytes::from(value), expire);
+                        // Dispatch the command
+                        let response = dispatch(&command, &args, &db);
 
-                        Value::SimpleString("OK".to_string())
+                        // Send the response
+                        let serialized = resp::serialize(response);
+                        stream.write_all(serialized.as_bytes()).await?;
+                    }
+                    Err(e) => {
+                        eprintln!("Command extraction error: {}", e);
+                        let error = Value::SimpleString("ERR invalid command format".into());
+                        let serialized = resp::serialize(error);
+                        stream.write_all(serialized.as_bytes()).await?;
                     }
                 }
-                "get" => {
-                    let key = unpack_bulk_str(args[0].clone()).unwrap();
-
-                    match store.get(&key) {
-                        Some(v) => Value::BulkString(String::from_utf8(v.to_vec()).unwrap()),
-                        None => Value::BulkString("nil".into())
-                    }
-                }
-
-                "RPUSH" => {
-                    if args.len() < 2 {
-                        Value::SimpleString("Err wrong number of arguments".into())
-                    } else {
-                        let key = unpack_bulk_str(args[0].clone()).unwrap();
-                        let values: Vec<Bytes> = args
-                            .iter()
-                            .skip(1)
-                            .map(|v| Bytes::from(unpack_bulk_str(v.clone()).unwrap()))
-                            .collect();
-
-                        let len = store.rpush(key, values);
-                        
-                        Value::Integer(len as i64)
-                    }
-                }
-                "LRANGE" => {
-                    if args.len() < 3 {
-                        Value::SimpleString("Err wrong number of arguments".into())
-                    } else {
-                        let key = unpack_bulk_str(args[0].clone()).unwrap();
-                        let start: i64 = unpack_bulk_str(args[1].clone()).unwrap().parse().unwrap();
-                        let end: i64 = unpack_bulk_str(args[2].clone()).unwrap().parse().unwrap();
-
-                        let elements = store.lrange(&key, start, end);
-                        let values: Vec<Value> = elements
-                            .iter()
-                            .map(|b| Value::BulkString(String::from_utf8(b.to_vec()).unwrap()))
-                            .collect();
-
-                        Value::Array(values)
-                    }
-                }
-                c => panic!("Cannot handle command {}" , c),
             }
-        } else {
-            break;
-        };
-
-        println!("sending value {:?}" , response);
-
-        handler.write_value(response).await.unwrap();
+            Err(e) => {
+                eprintln!("Parse error: {}", e);
+                // Wait for more data
+                if buffer.len() > 1024 * 1024 {
+                    let error = Value::SimpleString("ERR protocol error: too large bulk count".into());
+                    let serialized = resp::serialize(error);
+                    stream.write_all(serialized.as_bytes()).await?;
+                    return Err(e);
+                }
+            }
+        }
     }
 }
 
-fn extract_command(value : Value) -> Result<(String , Vec<Value>)>{
-    match value{
-        Value::Array(a) => {
-            Ok((
-                unpack_bulk_str(a.first().unwrap().clone())?,
-                a.into_iter().skip(1).collect(),
-            ))
-        },
-        _ => Err(anyhow::anyhow!("Unexpected command format")),
-    }
-}
-
-fn unpack_bulk_str(value: Value) -> Result<String> {
+fn extract_command(value: Value) -> Result<(String, Vec<Value>)> {
     match value {
-        Value::BulkString(s) => Ok(s),
-        _ => Err(anyhow::anyhow!("Expected command to be a bulk string"))
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                return Err(anyhow::anyhow!("Empty command array"));
+            }
+
+            let command = match &arr[0] {
+                Value::BulkString(s) => s.to_ascii_uppercase(),
+                _ => return Err(anyhow::anyhow!("Command is not a bulk string")),
+            };
+
+            let args = arr.into_iter().skip(1).collect();
+            Ok((command, args))
+        }
+        _ => Err(anyhow::anyhow!("Expected array")),
     }
 }
