@@ -4,6 +4,7 @@ pub enum Value {
     BulkString(String),
     Integer(i64),
     Array(Vec<Value>),
+    NullBulk,
 }
 
 impl Value {
@@ -26,7 +27,9 @@ impl Value {
                 }
 
                 out
-            }
+            },
+
+            Value::NullBulk => "$-1\r\n".to_string(),
         }
     }
 }

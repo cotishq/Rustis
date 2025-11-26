@@ -139,6 +139,16 @@ impl Db {
         }
     }
 
+    pub fn llen(&self , key: String) -> usize{
+        let state = self.shared.state.lock().unwrap();
+
+        match state.data.get(&key) {
+            Some(DbValue::List(deque)) => deque.len(),
+            _ => 0,
+            
+        }
+    }
+
     /// Get a range of elements from a list
     pub fn lrange(&self, key: &str, start: i64, end: i64) -> Vec<Bytes> {
         let state = self.shared.state.lock().unwrap();
@@ -163,6 +173,52 @@ impl Db {
             _ => vec![],
         }
     } 
+
+    pub fn lpop(&self , key: String) -> Option<Bytes>{
+        let mut state = self.shared.state.lock().unwrap();
+
+        match state.data.get_mut(&key) {
+            Some(DbValue::List(deque))=> {
+                let popped = deque.pop_front();
+
+                if deque.is_empty() {
+                    state.data.remove(&key);
+                }
+
+                popped
+            }
+
+            _ => None,
+            
+        }
+    }
+
+    pub fn lpop_n(&self, key: String, count: usize) -> Vec<Bytes> {
+        let mut state = self.shared.state.lock().unwrap();
+
+        let list = state.data.get_mut(&key);
+
+        if list.is_none() {
+            return vec![];
+        }
+
+        if let DbValue::List(deque) = list.unwrap() {
+            let mut result = Vec::new();
+
+            for _ in 0..count {
+                if let Some(v) = deque.pop_front() {
+                    result.push(v);
+                } else {
+                    break;
+                }
+            }
+
+            self.shared.notify.notify_one();
+            result
+        } else {
+            vec![]
+        }
+    }
 
     /// Normalize negative indices for list operations
     fn normalize_index(idx: i64, len: i64) -> i64 {

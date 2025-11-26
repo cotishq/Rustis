@@ -50,6 +50,21 @@ pub fn cmd_lpush(db: &Db, args: &[Value]) -> Value {
     Value::Integer(len as i64)
 }
 
+pub fn cmd_llen(db: &Db , args: &[Value]) -> Value{
+    if args.len() != 1{
+        return Value::SimpleString("Err wrong number of arguments for 'llen' command".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::SimpleString("Err invalid key" .into()),
+        
+    };
+
+    let len = db.llen(key);
+    Value::Integer(len as i64)
+}
+
 
 
 pub fn cmd_lrange(db: &Db, args: &[Value]) -> Value {
@@ -79,4 +94,50 @@ pub fn cmd_lrange(db: &Db, args: &[Value]) -> Value {
         .collect();
 
     Value::Array(values)
+}
+
+pub fn cmd_lpop(db: &Db, args: &[Value]) -> Value {
+    if args.len() < 1 {
+        return Value::SimpleString("ERR wrong number of arguments for 'lpop'".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+    };
+
+    // LPOP key
+    if args.len() == 1 {
+        let res = db.lpop(key);
+        return match res {
+            Some(bytes) => {
+                let s = String::from_utf8(bytes.to_vec()).unwrap_or_default();
+                Value::BulkString(s)
+            }
+            None => Value::NullBulk,
+        };
+    }
+
+    // LPOP key count
+    let count = match unpack_bulk_str(&args[1])
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+    {
+        Some(c) => c,
+        None => return Value::SimpleString("ERR value is not an integer".into()),
+    };
+
+    let popped = db.lpop_n(key, count);
+
+    if popped.is_empty() {
+        return Value::NullBulk; // Redis returns NIL, not empty array
+    }
+
+    // Convert popped values to RESP Array of BulkStrings
+    let arr = popped
+        .into_iter()
+        .map(|b| Value::BulkString(String::from_utf8(b.to_vec()).unwrap_or_default()))
+        .collect();
+
+    Value::Array(arr)
 }
