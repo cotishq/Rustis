@@ -10,6 +10,7 @@ pub fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
         "set" => string_cmds::cmd_set(db, args),
         "get" => string_cmds::cmd_get(db, args),
         "rpush" => list_cmds::cmd_rpush(db, args),
+        "lpush" => list_cmds::cmd_lpush(db, args),
         "lrange" => list_cmds::cmd_lrange(db, args),
         c => Value::SimpleString(format!("ERR unknown command '{}'", c)),
     }

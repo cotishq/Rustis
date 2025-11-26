@@ -118,6 +118,27 @@ impl Db {
         }
     }
 
+    pub fn lpush(&self , key: String , values: Vec<Bytes>) -> usize {
+        let mut state = self.shared.state.lock().unwrap();
+
+        let list = state
+            .data
+            .entry(key)
+            .or_insert_with(|| DbValue::List(VecDeque::new()));
+
+        if let DbValue::List(deque) = list{
+            for value in values {
+                deque.push_front(value);
+            }
+
+            let len = deque.len();
+            self.shared.notify.notify_one();
+            len
+        } else {
+            panic!("key is not a list");
+        }
+    }
+
     /// Get a range of elements from a list
     pub fn lrange(&self, key: &str, start: i64, end: i64) -> Vec<Bytes> {
         let state = self.shared.state.lock().unwrap();
@@ -141,7 +162,7 @@ impl Db {
             }
             _ => vec![],
         }
-    }
+    } 
 
     /// Normalize negative indices for list operations
     fn normalize_index(idx: i64, len: i64) -> i64 {

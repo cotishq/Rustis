@@ -29,6 +29,28 @@ pub fn cmd_rpush(db: &Db, args: &[Value]) -> Value {
     let len = db.rpush(key, values);
     Value::Integer(len as i64)
 }
+pub fn cmd_lpush(db: &Db, args: &[Value]) -> Value {
+    if args.len() < 2 {
+        return Value::SimpleString("ERR wrong number of arguments for 'rpush' command".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+    };
+
+    let values: Vec<Bytes> = args
+        .iter()
+        .skip(1)
+        .filter_map(|v| unpack_bulk_str(v).ok())
+        .map(Bytes::from)
+        .collect();
+
+    let len = db.lpush(key, values);
+    Value::Integer(len as i64)
+}
+
+
 
 pub fn cmd_lrange(db: &Db, args: &[Value]) -> Value {
     if args.len() < 3 {
