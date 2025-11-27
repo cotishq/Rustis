@@ -8,6 +8,7 @@ use tokio::time::{Duration, Instant};
 pub enum DbValue {
     String(Bytes),
     List(VecDeque<Bytes>),
+    Stream(Vec<StreamEntry>),
 }
 
 /// Main database handle (clonable)
@@ -27,6 +28,22 @@ struct State {
     data: HashMap<String, DbValue>,
     expirations: BTreeMap<Instant, String>,
 }
+
+impl DbValue {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            DbValue::String(_) => "string",
+            DbValue::List(_) => "list",
+            DbValue::Stream(_) => "stream",
+        }
+    }
+}
+#[derive(Clone, Debug)]
+pub struct StreamEntry{
+    pub id : String,
+    pub fields : Vec<(String , String)>,
+}
+
 
 impl Db {
     /// Create a new DB and start background task
@@ -217,6 +234,38 @@ impl Db {
             result
         } else {
             vec![]
+        }
+    }
+
+    pub fn get_type(&self , key: &str) -> String{
+        if self.is_expired(key){
+            self.remove_expired_key(key);
+            self.remove_expiration(key);
+            return "none".into();
+        }
+
+        let state = self.shared.state.lock().unwrap();
+
+        match state.data.get(key) {
+            Some(value) => value.type_name().to_string(),
+            None => "none".to_string()
+            
+        }
+    }
+
+    pub fn xadd(&self , key: String ,id: String , fields: Vec<(String , String)>) -> String{
+        let mut state = self.shared.state.lock().unwrap();
+
+        let stream = state.data.entry(key).or_insert_with(|| {
+            DbValue::Stream(Vec::new())
+        });
+
+        if let DbValue::Stream(entries) = stream{
+            let entry = StreamEntry{id : id.clone() , fields};
+            entries.push(entry);
+            id
+        } else {
+            panic!("key exists but is not a stream");
         }
     }
 

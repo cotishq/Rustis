@@ -60,7 +60,7 @@ async fn handle_connection(mut stream: TcpStream, db: Db) -> Result<()> {
                         println!("Command: {}, Args: {:?}", command, args);
 
                         // Dispatch the command
-                        let response = dispatch(&command, &args, &db);
+                        let response = dispatch(&command, &args, &db).await;
 
                         // Send the response
                         let serialized = resp::serialize(response);
