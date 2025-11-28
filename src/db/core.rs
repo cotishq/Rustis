@@ -269,6 +269,20 @@ impl Db {
         }
     }
 
+    pub fn get_last_stream_id(&self, key: &str) -> Option<(i64, i64)> {
+    let state = self.shared.state.lock().unwrap();
+
+    match state.data.get(key) {
+        Some(DbValue::Stream(entries)) => {
+            if let Some(last) = entries.last() {
+                crate::commands::streams_cmds::parse_id(&last.id)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
     /// Normalize negative indices for list operations
     fn normalize_index(idx: i64, len: i64) -> i64 {
         if idx < 0 {
