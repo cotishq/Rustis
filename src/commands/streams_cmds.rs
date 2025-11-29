@@ -50,21 +50,42 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
         _ => return Value::SimpleString("ERR invalid id".into()),
     };
 
-    let (ms , seq) = match parse_id(&id_str) {
-        Some(t) => t,
-        None => return Value::SimpleString("Err invalid ID format".into()),
-        
-    };
+    let auto_seq = id_str.ends_with("-*");
 
-    if ms == 0 && seq == 0{
-        return Value::SimpleString("Err The ID specified in XADD must be greater than 0-0".into());
+    let (mut ms, mut seq) = if auto_seq {
+    // Extract the ms part
+    let parts: Vec<&str> = id_str.split('-').collect();
+    if parts.len() != 2 {
+        return Value::SimpleString("ERR invalid ID format".into());
+    }
+    let ms_val = parts[0].parse::<i64>().unwrap_or(-1);
+
+    if ms_val < 0 {
+        return Value::SimpleString("ERR invalid time part".into());
     }
 
-    let last_id_opt = db.get_last_stream_id(&key);
+    (ms_val, -1) // seq = -1 means auto-generate
+    } else {
+        match parse_id(&id_str) {
+            Some(t) => t,
+            None => return Value::SimpleString("Err invalid ID format".into()),
+        }
+    };
 
-    if let Some((last_ms , last_seq)) = last_id_opt{
+    if auto_seq{
+        seq = db.next_sequence_for_ms(&key, ms);
+    }
+
+
+   if !auto_seq {
+    if ms == 0 && seq == 0 {
+        return Value::SimpleString(
+            "Err The ID specified in XADD must be greater than 0-0".into()
+        );
+    }
+
+    if let Some((last_ms , last_seq)) = db.get_last_stream_id(&key) {
         let invalid = ms < last_ms || (ms == last_ms && seq <= last_seq);
-
         if invalid {
             return Value::SimpleString(
                 "Err The ID specified in XADD is equal or smaller than the target stream top item".into()
@@ -75,6 +96,7 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
             return Value::SimpleString("Err The ID specified in XADD must be greater than 0-0".into());
         }
     }
+}
 
     let mut fields = Vec::new();
 
@@ -92,6 +114,8 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
         fields.push((field, value));
     }
 
-    let new_id = db.xadd(key, id_str.clone(), fields);
-    Value::BulkString(new_id)
+    let new_id_str = format!("{}-{}", ms, seq);
+    let new_id_str = db.xadd(key, new_id_str.clone(), fields);
+    Value::BulkString(new_id_str)
+
 }

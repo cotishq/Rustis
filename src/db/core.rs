@@ -283,6 +283,22 @@ impl Db {
         _ => None,
     }
 }
+
+    pub fn next_sequence_for_ms(&self , key: &str , ms:i64) -> i64{
+        if let Some((last_ms , last_seq)) = self.get_last_stream_id(key){
+            if ms == last_ms{
+                return last_seq + 1;
+            }
+        }
+
+        if ms == 0{
+            return 1;
+        }
+
+        0
+    }
+
+
     /// Normalize negative indices for list operations
     fn normalize_index(idx: i64, len: i64) -> i64 {
         if idx < 0 {
