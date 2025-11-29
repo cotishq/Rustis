@@ -1,4 +1,6 @@
 
+use std::fmt::format;
+
 use crate::resp::Value;
 use crate::db::Db;
 
@@ -51,6 +53,36 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
     };
 
     let auto_seq = id_str.ends_with("-*");
+    let full_auto = id_str == "*";
+
+    if full_auto{
+        use std::time::{SystemTime , UNIX_EPOCH};
+
+        let ms_now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+
+        let seq_now = db.next_sequence_for_ms(&key, ms_now);
+
+        let new_id_str = format!("{}-{}" , ms_now , seq_now);
+
+        let mut fields = Vec::new();
+        for i in (2..args.len()).step_by(2) {
+            let field = match &args[i] {
+                Value::BulkString(s) => s.clone(),
+                _ => return Value::SimpleString("ERR invalid field".into()),
+            };
+            let value = match &args[i + 1] {
+                Value::BulkString(s) => s.clone(),
+                _ => return Value::SimpleString("ERR invalid value".into()),
+            };
+            fields.push((field, value));
+        }
+
+        db.xadd(key, new_id_str.clone(), fields);
+        return Value::BulkString(new_id_str);
+    }
 
     let (mut ms, mut seq) = if auto_seq {
     // Extract the ms part
@@ -75,7 +107,6 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
     if auto_seq{
         seq = db.next_sequence_for_ms(&key, ms);
     }
-
 
    if !auto_seq {
     if ms == 0 && seq == 0 {
@@ -115,7 +146,7 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
     }
 
     let new_id_str = format!("{}-{}", ms, seq);
-    let new_id_str = db.xadd(key, new_id_str.clone(), fields);
+    db.xadd(key, new_id_str.clone(), fields);
     Value::BulkString(new_id_str)
 
 }
