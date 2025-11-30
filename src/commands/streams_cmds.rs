@@ -151,6 +151,12 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
 }
 
 fn parse_range_id(id: &str, is_start: bool) -> Option<(i64, i64)> {
+    if id == "-" {
+        return Some((0, 0));
+    }
+    if id == "+" {
+        return Some((i64::MAX, i64::MAX));
+    }
     let parts: Vec<&str> = id.split('-').collect();
     match parts.len() {
         1 => {
