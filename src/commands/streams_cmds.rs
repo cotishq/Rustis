@@ -1,5 +1,4 @@
 
-use std::fmt::format;
 
 use crate::resp::Value;
 use crate::db::Db;
@@ -84,7 +83,7 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
         return Value::BulkString(new_id_str);
     }
 
-    let (mut ms, mut seq) = if auto_seq {
+    let ( ms, mut seq) = if auto_seq {
     // Extract the ms part
     let parts: Vec<&str> = id_str.split('-').collect();
     if parts.len() != 2 {
@@ -149,4 +148,69 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
     db.xadd(key, new_id_str.clone(), fields);
     Value::BulkString(new_id_str)
 
+}
+
+fn parse_range_id(id: &str, is_start: bool) -> Option<(i64, i64)> {
+    let parts: Vec<&str> = id.split('-').collect();
+    match parts.len() {
+        1 => {
+            let ms = parts[0].parse::<i64>().ok()?;
+            let seq = if is_start { 0 } else { i64::MAX };
+            Some((ms, seq))
+        }
+        2 => {
+            let ms = parts[0].parse::<i64>().ok()?;
+            let seq = parts[1].parse::<i64>().ok()?;
+            Some((ms, seq))
+        }
+        _ => None,
+    }
+}
+
+pub fn cmd_xrange(db: &Db, args: &[Value]) -> Value {
+    if args.len() < 3 {
+        return Value::SimpleString("ERR wrong number of arguments for 'xrange' command".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+    };
+
+    let start_str = match unpack_bulk_str(&args[1]) {
+        Ok(s) => s,
+        Err(_) => return Value::SimpleString("ERR invalid start ID".into()),
+    };
+
+    let end_str = match unpack_bulk_str(&args[2]) {
+        Ok(s) => s,
+        Err(_) => return Value::SimpleString("ERR invalid end ID".into()),
+    };
+
+    let start = match parse_range_id(&start_str, true) {
+        Some(id) => id,
+        None => return Value::SimpleString("ERR invalid start ID".into()),
+    };
+
+    let end = match parse_range_id(&end_str, false) {
+        Some(id) => id,
+        None => return Value::SimpleString("ERR invalid end ID".into()),
+    };
+
+    let entries = db.xrange(&key, start, end);
+
+    let result: Vec<Value> = entries
+        .iter()
+        .map(|entry| {
+            let id = Value::BulkString(entry.id.clone());
+            let fields: Vec<Value> = entry
+                .fields
+                .iter()
+                .flat_map(|(k, v)| vec![Value::BulkString(k.clone()), Value::BulkString(v.clone())])
+                .collect();
+            Value::Array(vec![id, Value::Array(fields)])
+        })
+        .collect();
+
+    Value::Array(result)
 }

@@ -298,6 +298,28 @@ impl Db {
         0
     }
 
+    pub fn xrange(&self, key: &str, start: (i64, i64), end: (i64, i64)) -> Vec<StreamEntry> {
+        let state = self.shared.state.lock().unwrap();
+
+        match state.data.get(key) {
+            Some(DbValue::Stream(entries)) => {
+                entries
+                    .iter()
+                    .filter(|entry| {
+                        if let Some((ms, seq)) = crate::commands::streams_cmds::parse_id(&entry.id) {
+                            let after_start = ms > start.0 || (ms == start.0 && seq >= start.1);
+                            let before_end = ms < end.0 || (ms == end.0 && seq <= end.1);
+                            after_start && before_end
+                        } else {
+                            false
+                        }
+                    })
+                    .cloned()
+                    .collect()
+            }
+            _ => vec![],
+        }
+    }
 
     /// Normalize negative indices for list operations
     fn normalize_index(idx: i64, len: i64) -> i64 {
