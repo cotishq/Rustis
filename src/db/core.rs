@@ -321,6 +321,28 @@ impl Db {
         }
     }
 
+    pub fn xread(&self, key: &str, start: (i64, i64)) -> Vec<StreamEntry> {
+        let state = self.shared.state.lock().unwrap();
+
+        match state.data.get(key) {
+            Some(DbValue::Stream(entries)) => {
+                entries
+                    .iter()
+                    .filter(|entry| {
+                        if let Some((ms, seq)) = crate::commands::streams_cmds::parse_id(&entry.id) {
+                            // Exclusive: ID must be strictly greater than start
+                            ms > start.0 || (ms == start.0 && seq > start.1)
+                        } else {
+                            false
+                        }
+                    })
+                    .cloned()
+                    .collect()
+            }
+            _ => vec![],
+        }
+    }
+
     /// Normalize negative indices for list operations
     fn normalize_index(idx: i64, len: i64) -> i64 {
         if idx < 0 {

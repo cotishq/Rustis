@@ -220,3 +220,90 @@ pub fn cmd_xrange(db: &Db, args: &[Value]) -> Value {
 
     Value::Array(result)
 }
+
+pub fn cmd_xread(db: &Db, args: &[Value]) -> Value {
+    // Format: XREAD STREAMS <key1> <key2> ... <id1> <id2> ...
+    if args.len() < 3 {
+        return Value::SimpleString("ERR wrong number of arguments for 'xread' command".into());
+    }
+
+    let streams_keyword = match unpack_bulk_str(&args[0]) {
+        Ok(s) => s,
+        Err(_) => return Value::SimpleString("ERR invalid argument".into()),
+    };
+
+    if streams_keyword.to_uppercase() != "STREAMS" {
+        return Value::SimpleString("ERR syntax error".into());
+    }
+
+    // After STREAMS keyword, we have keys followed by ids
+    // The number of keys equals the number of ids
+    let remaining = &args[1..];
+    if remaining.len() % 2 != 0 {
+        return Value::SimpleString("ERR Unbalanced 'xread' list of streams: for each stream key an ID must be specified".into());
+    }
+
+    let num_streams = remaining.len() / 2;
+    let keys_slice = &remaining[..num_streams];
+    let ids_slice = &remaining[num_streams..];
+
+    // Parse all keys
+    let mut keys = Vec::with_capacity(num_streams);
+    for k in keys_slice {
+        match unpack_bulk_str(k) {
+            Ok(key) => keys.push(key),
+            Err(_) => return Value::SimpleString("ERR invalid key".into()),
+        }
+    }
+
+    // Parse all IDs
+    let mut ids = Vec::with_capacity(num_streams);
+    for id in ids_slice {
+        let id_str = match unpack_bulk_str(id) {
+            Ok(s) => s,
+            Err(_) => return Value::SimpleString("ERR invalid ID".into()),
+        };
+        match parse_id(&id_str) {
+            Some(parsed) => ids.push(parsed),
+            None => return Value::SimpleString("ERR invalid stream ID".into()),
+        }
+    }
+
+    // Query each stream and build results
+    let mut all_results = Vec::new();
+    let mut has_entries = false;
+
+    for (key, start) in keys.iter().zip(ids.iter()) {
+        let entries = db.xread(key, *start);
+        
+        if !entries.is_empty() {
+            has_entries = true;
+        }
+
+        let entry_values: Vec<Value> = entries
+            .iter()
+            .map(|entry| {
+                let id = Value::BulkString(entry.id.clone());
+                let fields: Vec<Value> = entry
+                    .fields
+                    .iter()
+                    .flat_map(|(k, v)| vec![Value::BulkString(k.clone()), Value::BulkString(v.clone())])
+                    .collect();
+                Value::Array(vec![id, Value::Array(fields)])
+            })
+            .collect();
+
+        let stream_result = Value::Array(vec![
+            Value::BulkString(key.clone()),
+            Value::Array(entry_values),
+        ]);
+
+        all_results.push(stream_result);
+    }
+
+    if !has_entries {
+        return Value::NullBulk;
+    }
+
+    Value::Array(all_results)
+}

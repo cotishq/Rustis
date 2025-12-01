@@ -18,6 +18,7 @@ pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
         "type" => streams_cmds::cmd_type(db, args),
         "xadd" => streams_cmds::cmd_xadd(db, args).await,
         "xrange" => streams_cmds::cmd_xrange(db, args),
+        "xread" => streams_cmds::cmd_xread(db, args),
         c => Value::SimpleString(format!("ERR unknown command '{}'", c)),
     }
 }
