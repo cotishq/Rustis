@@ -65,3 +65,19 @@ pub fn cmd_get(db: &Db, args: &[Value]) -> Value {
         None => Value::BulkString("nil".into()),
     }
 }
+
+pub fn cmd_incr(db: &Db, args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::SimpleString("ERR wrong number of arguments for 'incr' command".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+    };
+
+    match db.incr(&key) {
+        Ok(val) => Value::Integer(val),
+        Err(e) => Value::SimpleString(e.into()),
+    }
+}

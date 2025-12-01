@@ -114,6 +114,30 @@ impl Db {
         }
     }
 
+    /// Increment a string value by 1, returns the new value or error
+    pub fn incr(&self, key: &str) -> Result<i64, &'static str> {
+        if self.is_expired(key) {
+            self.remove_expired_key(key);
+            self.remove_expiration(key);
+        }
+
+        let mut state = self.shared.state.lock().unwrap();
+        match state.data.get(key) {
+            Some(DbValue::String(bytes)) => {
+                let s = std::str::from_utf8(bytes).map_err(|_| "ERR value is not an integer or out of range")?;
+                let val: i64 = s.parse().map_err(|_| "ERR value is not an integer or out of range")?;
+                let new_val = val + 1;
+                state.data.insert(key.to_string(), DbValue::String(Bytes::from(new_val.to_string())));
+                Ok(new_val)
+            }
+            Some(_) => Err("WRONGTYPE Operation against a key holding the wrong kind of value"),
+            None => {
+                state.data.insert(key.to_string(), DbValue::String(Bytes::from("1")));
+                Ok(1)
+            }
+        }
+    }
+
     /// Append elements to a list
     pub fn rpush(&self, key: String, values: Vec<Bytes>) -> usize {
         let mut state = self.shared.state.lock().unwrap();

@@ -10,6 +10,7 @@ pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
         "echo" => args.first().cloned().unwrap_or(Value::SimpleString("".into())),
         "set" => string_cmds::cmd_set(db, args),
         "get" => string_cmds::cmd_get(db, args),
+        "incr" => string_cmds::cmd_incr(db, args),
         "rpush" => list_cmds::cmd_rpush(db, args),
         "lpush" => list_cmds::cmd_lpush(db, args),
         "llen" => list_cmds::cmd_llen(db, args),
