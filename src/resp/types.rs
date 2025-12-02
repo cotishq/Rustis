@@ -1,6 +1,7 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     SimpleString(String),
+    Error(String),
     BulkString(String),
     Integer(i64),
     Array(Vec<Value>),
@@ -12,6 +13,8 @@ impl Value {
     pub fn serialize(&self) -> String {
         match self {
             Value::SimpleString(s) => format!("+{}\r\n", s),
+
+            Value::Error(s) => format!("-{}\r\n", s),
 
             Value::BulkString(s) => {
                 format!("${}\r\n{}\r\n", s.len(), s)

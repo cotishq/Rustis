@@ -3,6 +3,7 @@ use crate::db::Db;
 use super::string_cmds;
 use super::list_cmds;
 use super::streams_cmds;
+use super::trxns_cmds;
 
 pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
     match cmd.to_lowercase().as_str() {
@@ -20,6 +21,8 @@ pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
         "xadd" => streams_cmds::cmd_xadd(db, args).await,
         "xrange" => streams_cmds::cmd_xrange(db, args),
         "xread" => streams_cmds::cmd_xread(db, args),
+        "multi" => trxns_cmds::cmd_multi(db, args),
+        "exec" => trxns_cmds::cmd_exec(db, args),
         c => Value::SimpleString(format!("ERR unknown command '{}'", c)),
     }
 }

@@ -40,6 +40,8 @@ async fn main() {
 
 async fn handle_connection(mut stream: TcpStream, db: Db) -> Result<()> {
     let mut buffer = BytesMut::with_capacity(512);
+    let mut in_transaction = false;
+    let mut queued_commands: Vec<(String, Vec<Value>)> = Vec::new();
 
     loop {
         let n = stream.read_buf(&mut buffer).await?;
@@ -59,8 +61,40 @@ async fn handle_connection(mut stream: TcpStream, db: Db) -> Result<()> {
                     Ok((command, args)) => {
                         println!("Command: {}, Args: {:?}", command, args);
 
-                        // Dispatch the command
-                        let response = dispatch(&command, &args, &db).await;
+                        // Handle transaction commands specially
+                        let response = match command.as_str() {
+                            "MULTI" => {
+                                in_transaction = true;
+                                queued_commands.clear();
+                                Value::SimpleString("OK".into())
+                            }
+                            "EXEC" => {
+                                if in_transaction {
+                                    in_transaction = false;
+                                    
+                                    // Execute all queued commands
+                                    let mut results = Vec::new();
+                                    for (cmd, cmd_args) in queued_commands.drain(..) {
+                                        let result = dispatch(&cmd, &cmd_args, &db).await;
+                                        results.push(result);
+                                    }
+                                    
+                                    Value::Array(results)
+                                } else {
+                                    Value::Error("ERR EXEC without MULTI".into())
+                                }
+                            }
+                            _ => {
+                                if in_transaction {
+                                    // Queue the command instead of executing it
+                                    queued_commands.push((command.clone(), args));
+                                    Value::SimpleString("QUEUED".into())
+                                } else {
+                                    // Execute normally if not in a transaction
+                                    dispatch(&command, &args, &db).await
+                                }
+                            }
+                        };
 
                         // Send the response
                         let serialized = resp::serialize(response);

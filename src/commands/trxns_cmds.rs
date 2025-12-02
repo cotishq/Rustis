@@ -8,3 +8,10 @@ fn unpack_bulk_str(value: &Value) -> Result<String, anyhow::Error> {
     }
 }
 
+pub fn cmd_multi(_db: &Db, _args: &[Value]) -> Value {
+    Value::SimpleString("OK".into())
+}
+
+pub fn cmd_exec(_db : &Db , _args: &[Value]) -> Value{
+    Value::SimpleString("ERR EXEC without MULTI".into())
+}
