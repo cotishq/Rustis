@@ -84,6 +84,15 @@ async fn handle_connection(mut stream: TcpStream, db: Db) -> Result<()> {
                                     Value::Error("ERR EXEC without MULTI".into())
                                 }
                             }
+                            "DISCARD" => {
+                                if in_transaction {
+                                    in_transaction = false;
+                                    queued_commands.clear();
+                                    Value::SimpleString("OK".into())
+                                } else {
+                                    Value::Error("ERR DISCARD without MULTI".into())
+                                }
+                            }
                             _ => {
                                 if in_transaction {
                                     // Queue the command instead of executing it

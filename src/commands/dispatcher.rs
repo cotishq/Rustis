@@ -23,6 +23,7 @@ pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
         "xread" => streams_cmds::cmd_xread(db, args),
         "multi" => trxns_cmds::cmd_multi(db, args),
         "exec" => trxns_cmds::cmd_exec(db, args),
+        "discard" => trxns_cmds::cmd_discard(db, args),
         c => Value::SimpleString(format!("ERR unknown command '{}'", c)),
     }
 }
