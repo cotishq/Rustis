@@ -23,12 +23,12 @@ pub fn parse_id(id: &str) -> Option<(i64, i64)> {
 
 pub fn cmd_type(db: &Db , args:&[Value]) -> Value{
     if args.len() != 1{
-        return Value::SimpleString("Err wrong number of arguments for 'type' command".into() );
+        return Value::Error("Err wrong number of arguments for 'type' command".into() );
     }
 
     let key = match unpack_bulk_str(&args[0]) {
         Ok(k) => k,
-        Err(_) => return Value::SimpleString("Err invalid key".into()),
+        Err(_) => return Value::Error("Err invalid key".into()),
     };
 
     let t = db.get_type(&key);
@@ -38,17 +38,17 @@ pub fn cmd_type(db: &Db , args:&[Value]) -> Value{
 pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
 
     if args.len() < 4 || (args.len() - 2) % 2 != 0 {
-        return Value::SimpleString("ERR wrong number of arguments".into());
+        return Value::Error("ERR wrong number of arguments".into());
     }
 
     let key = match &args[0] {
         Value::BulkString(s) => s.clone(),
-        _ => return Value::SimpleString("ERR invalid key".into()),
+        _ => return Value::Error("ERR invalid key".into()),
     };
 
     let id_str = match &args[1] {
         Value::BulkString(s) => s.clone(),
-        _ => return Value::SimpleString("ERR invalid id".into()),
+        _ => return Value::Error("ERR invalid id".into()),
     };
 
     let auto_seq = id_str.ends_with("-*");
@@ -70,11 +70,11 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
         for i in (2..args.len()).step_by(2) {
             let field = match &args[i] {
                 Value::BulkString(s) => s.clone(),
-                _ => return Value::SimpleString("ERR invalid field".into()),
+                _ => return Value::Error("ERR invalid field".into()),
             };
             let value = match &args[i + 1] {
                 Value::BulkString(s) => s.clone(),
-                _ => return Value::SimpleString("ERR invalid value".into()),
+                _ => return Value::Error("ERR invalid value".into()),
             };
             fields.push((field, value));
         }
@@ -87,19 +87,19 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
     // Extract the ms part
     let parts: Vec<&str> = id_str.split('-').collect();
     if parts.len() != 2 {
-        return Value::SimpleString("ERR invalid ID format".into());
+        return Value::Error("ERR invalid ID format".into());
     }
     let ms_val = parts[0].parse::<i64>().unwrap_or(-1);
 
     if ms_val < 0 {
-        return Value::SimpleString("ERR invalid time part".into());
+        return Value::Error("ERR invalid time part".into());
     }
 
     (ms_val, -1) // seq = -1 means auto-generate
     } else {
         match parse_id(&id_str) {
             Some(t) => t,
-            None => return Value::SimpleString("Err invalid ID format".into()),
+            None => return Value::Error("Err invalid ID format".into()),
         }
     };
 
@@ -109,7 +109,7 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
 
    if !auto_seq {
     if ms == 0 && seq == 0 {
-        return Value::SimpleString(
+        return Value::Error(
             "Err The ID specified in XADD must be greater than 0-0".into()
         );
     }
@@ -117,13 +117,13 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
     if let Some((last_ms , last_seq)) = db.get_last_stream_id(&key) {
         let invalid = ms < last_ms || (ms == last_ms && seq <= last_seq);
         if invalid {
-            return Value::SimpleString(
+            return Value::Error(
                 "Err The ID specified in XADD is equal or smaller than the target stream top item".into()
             );
         }
     } else {
         if ms == 0 && seq < 1 {
-            return Value::SimpleString("Err The ID specified in XADD must be greater than 0-0".into());
+            return Value::Error("Err The ID specified in XADD must be greater than 0-0".into());
         }
     }
 }
@@ -133,12 +133,12 @@ pub async fn cmd_xadd(db: &Db, args: &[Value]) -> Value {
     for i in (2..args.len()).step_by(2) {
         let field = match &args[i] {
             Value::BulkString(s) => s.clone(),
-            _ => return Value::SimpleString("ERR invalid field".into()),
+            _ => return Value::Error("ERR invalid field".into()),
         };
 
         let value = match &args[i + 1] {
             Value::BulkString(s) => s.clone(),
-            _ => return Value::SimpleString("ERR invalid value".into()),
+            _ => return Value::Error("ERR invalid value".into()),
         };
 
         fields.push((field, value));
@@ -175,32 +175,32 @@ fn parse_range_id(id: &str, is_start: bool) -> Option<(i64, i64)> {
 
 pub fn cmd_xrange(db: &Db, args: &[Value]) -> Value {
     if args.len() < 3 {
-        return Value::SimpleString("ERR wrong number of arguments for 'xrange' command".into());
+        return Value::Error("ERR wrong number of arguments for 'xrange' command".into());
     }
 
     let key = match unpack_bulk_str(&args[0]) {
         Ok(k) => k,
-        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+        Err(_) => return Value::Error("ERR invalid key".into()),
     };
 
     let start_str = match unpack_bulk_str(&args[1]) {
         Ok(s) => s,
-        Err(_) => return Value::SimpleString("ERR invalid start ID".into()),
+        Err(_) => return Value::Error("ERR invalid start ID".into()),
     };
 
     let end_str = match unpack_bulk_str(&args[2]) {
         Ok(s) => s,
-        Err(_) => return Value::SimpleString("ERR invalid end ID".into()),
+        Err(_) => return Value::Error("ERR invalid end ID".into()),
     };
 
     let start = match parse_range_id(&start_str, true) {
         Some(id) => id,
-        None => return Value::SimpleString("ERR invalid start ID".into()),
+        None => return Value::Error("ERR invalid start ID".into()),
     };
 
     let end = match parse_range_id(&end_str, false) {
         Some(id) => id,
-        None => return Value::SimpleString("ERR invalid end ID".into()),
+        None => return Value::Error("ERR invalid end ID".into()),
     };
 
     let entries = db.xrange(&key, start, end);
@@ -224,23 +224,23 @@ pub fn cmd_xrange(db: &Db, args: &[Value]) -> Value {
 pub fn cmd_xread(db: &Db, args: &[Value]) -> Value {
     // Format: XREAD STREAMS <key1> <key2> ... <id1> <id2> ...
     if args.len() < 3 {
-        return Value::SimpleString("ERR wrong number of arguments for 'xread' command".into());
+        return Value::Error("ERR wrong number of arguments for 'xread' command".into());
     }
 
     let streams_keyword = match unpack_bulk_str(&args[0]) {
         Ok(s) => s,
-        Err(_) => return Value::SimpleString("ERR invalid argument".into()),
+        Err(_) => return Value::Error("ERR invalid argument".into()),
     };
 
     if streams_keyword.to_uppercase() != "STREAMS" {
-        return Value::SimpleString("ERR syntax error".into());
+        return Value::Error("ERR syntax error".into());
     }
 
     // After STREAMS keyword, we have keys followed by ids
     // The number of keys equals the number of ids
     let remaining = &args[1..];
     if remaining.len() % 2 != 0 {
-        return Value::SimpleString("ERR Unbalanced 'xread' list of streams: for each stream key an ID must be specified".into());
+        return Value::Error("ERR Unbalanced 'xread' list of streams: for each stream key an ID must be specified".into());
     }
 
     let num_streams = remaining.len() / 2;
@@ -252,7 +252,7 @@ pub fn cmd_xread(db: &Db, args: &[Value]) -> Value {
     for k in keys_slice {
         match unpack_bulk_str(k) {
             Ok(key) => keys.push(key),
-            Err(_) => return Value::SimpleString("ERR invalid key".into()),
+            Err(_) => return Value::Error("ERR invalid key".into()),
         }
     }
 
@@ -261,11 +261,11 @@ pub fn cmd_xread(db: &Db, args: &[Value]) -> Value {
     for id in ids_slice {
         let id_str = match unpack_bulk_str(id) {
             Ok(s) => s,
-            Err(_) => return Value::SimpleString("ERR invalid ID".into()),
+            Err(_) => return Value::Error("ERR invalid ID".into()),
         };
         match parse_id(&id_str) {
             Some(parsed) => ids.push(parsed),
-            None => return Value::SimpleString("ERR invalid stream ID".into()),
+            None => return Value::Error("ERR invalid stream ID".into()),
         }
     }
 

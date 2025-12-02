@@ -11,12 +11,12 @@ fn unpack_bulk_str(value: &Value) -> Result<String, anyhow::Error> {
 
 pub fn cmd_rpush(db: &Db, args: &[Value]) -> Value {
     if args.len() < 2 {
-        return Value::SimpleString("ERR wrong number of arguments for 'rpush' command".into());
+        return Value::Error("ERR wrong number of arguments for 'rpush' command".into());
     }
 
     let key = match unpack_bulk_str(&args[0]) {
         Ok(k) => k,
-        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+        Err(_) => return Value::Error("ERR invalid key".into()),
     };
 
     let values: Vec<Bytes> = args
@@ -31,12 +31,12 @@ pub fn cmd_rpush(db: &Db, args: &[Value]) -> Value {
 }
 pub fn cmd_lpush(db: &Db, args: &[Value]) -> Value {
     if args.len() < 2 {
-        return Value::SimpleString("ERR wrong number of arguments for 'rpush' command".into());
+        return Value::Error("ERR wrong number of arguments for 'rpush' command".into());
     }
 
     let key = match unpack_bulk_str(&args[0]) {
         Ok(k) => k,
-        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+        Err(_) => return Value::Error("ERR invalid key".into()),
     };
 
     let values: Vec<Bytes> = args
@@ -52,12 +52,12 @@ pub fn cmd_lpush(db: &Db, args: &[Value]) -> Value {
 
 pub fn cmd_llen(db: &Db , args: &[Value]) -> Value{
     if args.len() != 1{
-        return Value::SimpleString("Err wrong number of arguments for 'llen' command".into());
+        return Value::Error("Err wrong number of arguments for 'llen' command".into());
     }
 
     let key = match unpack_bulk_str(&args[0]) {
         Ok(k) => k,
-        Err(_) => return Value::SimpleString("Err invalid key" .into()),
+        Err(_) => return Value::Error("Err invalid key" .into()),
         
     };
 
@@ -69,12 +69,12 @@ pub fn cmd_llen(db: &Db , args: &[Value]) -> Value{
 
 pub fn cmd_lrange(db: &Db, args: &[Value]) -> Value {
     if args.len() < 3 {
-        return Value::SimpleString("ERR wrong number of arguments for 'lrange' command".into());
+        return Value::Error("ERR wrong number of arguments for 'lrange' command".into());
     }
 
     let key = match unpack_bulk_str(&args[0]) {
         Ok(k) => k,
-        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+        Err(_) => return Value::Error("ERR invalid key".into()),
     };
 
     let start: i64 = unpack_bulk_str(&args[1])
@@ -98,12 +98,12 @@ pub fn cmd_lrange(db: &Db, args: &[Value]) -> Value {
 
 pub fn cmd_lpop(db: &Db, args: &[Value]) -> Value {
     if args.len() < 1 {
-        return Value::SimpleString("ERR wrong number of arguments for 'lpop'".into());
+        return Value::Error("ERR wrong number of arguments for 'lpop'".into());
     }
 
     let key = match unpack_bulk_str(&args[0]) {
         Ok(k) => k,
-        Err(_) => return Value::SimpleString("ERR invalid key".into()),
+        Err(_) => return Value::Error("ERR invalid key".into()),
     };
 
     // LPOP key
@@ -124,7 +124,7 @@ pub fn cmd_lpop(db: &Db, args: &[Value]) -> Value {
         .and_then(|s| s.parse::<usize>().ok())
     {
         Some(c) => c,
-        None => return Value::SimpleString("ERR value is not an integer".into()),
+        None => return Value::Error("ERR value is not an integer".into()),
     };
 
     let popped = db.lpop_n(key, count);
