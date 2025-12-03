@@ -14,8 +14,9 @@ use commands::dispatch;
 
 #[tokio::main]
 async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
-    println!("Rustis server listening on 127.0.0.1:6379");
+    let port = std::env::args().nth(2).unwrap_or("6379".into());
+    let listener = TcpListener::bind(format!("127.0.0.1:{}" ,port)).await.unwrap();
+    println!("Rustis server listening on 127.0.0.1:{}", port);
 
     let store = Db::new();
 
