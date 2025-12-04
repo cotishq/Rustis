@@ -4,6 +4,7 @@ use super::string_cmds;
 use super::list_cmds;
 use super::streams_cmds;
 use super::trxns_cmds;
+use super::repl_cmds;
 
 pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
     match cmd.to_lowercase().as_str() {
@@ -24,6 +25,7 @@ pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
         "multi" => trxns_cmds::cmd_multi(db, args),
         "exec" => trxns_cmds::cmd_exec(db, args),
         "discard" => trxns_cmds::cmd_discard(db, args),
+        "info" => repl_cmds::cmd_info(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
