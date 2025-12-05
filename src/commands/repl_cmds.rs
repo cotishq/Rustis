@@ -23,7 +23,10 @@ pub fn cmd_info(db: &Db, args: &[Value]) -> Value {
             ServerRole::Master => "master",
             ServerRole::Slave { .. } => "slave",
         };
-        let info = format!("role:{}", role);
+        let info = format!(
+            "role:{}\nmaster_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\nmaster_repl_offset:0",
+            role
+        );
         Value::BulkString(info)
     } else {
         Value::Error(format!("ERR unsupported INFO section '{}'", section))
