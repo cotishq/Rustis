@@ -1,5 +1,5 @@
 use crate::resp::Value;
-use crate::db::Db;
+use crate::db::{Db, ServerRole};
 
 fn unpack_bulk_str(value: &Value) -> Result<String, anyhow::Error> {
     match value {
@@ -8,7 +8,7 @@ fn unpack_bulk_str(value: &Value) -> Result<String, anyhow::Error> {
     }
 }
 
-pub fn cmd_info(_db: &Db, args: &[Value]) -> Value {
+pub fn cmd_info(db: &Db, args: &[Value]) -> Value {
     let section = if args.is_empty() {
         "replication".to_string()
     } else {
@@ -19,8 +19,12 @@ pub fn cmd_info(_db: &Db, args: &[Value]) -> Value {
     };
 
     if section == "replication" {
-        let info = "role:master";
-        Value::BulkString(info.to_string())
+        let role = match &db.config.role {
+            ServerRole::Master => "master",
+            ServerRole::Slave { .. } => "slave",
+        };
+        let info = format!("role:{}", role);
+        Value::BulkString(info)
     } else {
         Value::Error(format!("ERR unsupported INFO section '{}'", section))
     }

@@ -5,6 +5,25 @@ use tokio::sync::Notify;
 use tokio::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
+pub enum ServerRole {
+    Master,
+    Slave { master_host: String, master_port: u16 },
+}
+
+#[derive(Clone, Debug)]
+pub struct ServerConfig {
+    pub role: ServerRole,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            role: ServerRole::Master,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum DbValue {
     String(Bytes),
     List(VecDeque<Bytes>),
@@ -15,6 +34,7 @@ pub enum DbValue {
 #[derive(Clone)]
 pub struct Db {
     shared: Arc<Shared>,
+    pub config: ServerConfig,
 }
 
 /// Internal shared structure
@@ -47,7 +67,7 @@ pub struct StreamEntry{
 
 impl Db {
     /// Create a new DB and start background task
-    pub fn new() -> Self {
+    pub fn new(config: ServerConfig) -> Self {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
                 data: HashMap::new(),
@@ -58,7 +78,7 @@ impl Db {
 
         tokio::spawn(clean_expired(shared.clone()));
 
-        Self { shared }
+        Self { shared, config }
     }
 
     /// Remove expired keys; returns next expiration time
@@ -416,6 +436,6 @@ fn purge(shared: &Shared) -> Option<Instant> {
 
 impl Default for Db {
     fn default() -> Self {
-        Self::new()
+        Self::new(ServerConfig::default())
     }
 }

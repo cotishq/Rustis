@@ -9,16 +9,55 @@ mod db;
 mod commands;
 
 use resp::Value;
-use db::Db;
+use db::{Db, ServerConfig, ServerRole};
 use commands::dispatch;
+
+fn parse_args() -> (String, ServerConfig) {
+    let args: Vec<String> = std::env::args().collect();
+    let mut port = "6379".to_string();
+    let mut config = ServerConfig::default();
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--port" => {
+                if i + 1 < args.len() {
+                    port = args[i + 1].clone();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--replicaof" => {
+                if i + 1 < args.len() {
+                    let replica_info = &args[i + 1];
+                    let parts: Vec<&str> = replica_info.split_whitespace().collect();
+                    if parts.len() == 2 {
+                        let master_host = parts[0].to_string();
+                        let master_port: u16 = parts[1].parse().unwrap_or(6379);
+                        config.role = ServerRole::Slave { master_host, master_port };
+                    }
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    (port, config)
+}
 
 #[tokio::main]
 async fn main() {
-    let port = std::env::args().nth(2).unwrap_or("6379".into());
+    let (port, config) = parse_args();
     let listener = TcpListener::bind(format!("127.0.0.1:{}" ,port)).await.unwrap();
     println!("Rustis server listening on 127.0.0.1:{}", port);
 
-    let store = Db::new();
+    let store = Db::new(config);
 
     loop {
         match listener.accept().await {
