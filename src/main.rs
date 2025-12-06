@@ -7,10 +7,13 @@ use anyhow::Result;
 mod resp;
 mod db;
 mod commands;
+mod replication;
 
 use resp::Value;
 use db::{Db, ServerConfig, ServerRole};
 use commands::dispatch;
+use replication::handshake::perform_handshake;
+
 
 fn parse_args() -> (String, ServerConfig) {
     let args: Vec<String> = std::env::args().collect();
@@ -57,6 +60,12 @@ async fn main() {
     let listener = TcpListener::bind(format!("127.0.0.1:{}" ,port)).await.unwrap();
     println!("Rustis server listening on 127.0.0.1:{}", port);
 
+    // If replica mode, connect to master and perform handshake
+    if let ServerRole::Slave { ref master_host, master_port } = config.role {
+        let replica_port: u16 = port.parse().unwrap_or(6379);
+        tokio::spawn(perform_handshake(master_host.clone(), master_port, replica_port));
+    }
+
     let store = Db::new(config);
 
     loop {
@@ -77,6 +86,8 @@ async fn main() {
         }
     }
 }
+
+
 
 async fn handle_connection(mut stream: TcpStream, db: Db) -> Result<()> {
     let mut buffer = BytesMut::with_capacity(512);

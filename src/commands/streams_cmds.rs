@@ -222,7 +222,7 @@ pub fn cmd_xrange(db: &Db, args: &[Value]) -> Value {
 }
 
 pub fn cmd_xread(db: &Db, args: &[Value]) -> Value {
-    // Format: XREAD STREAMS <key1> <key2> ... <id1> <id2> ...
+
     if args.len() < 3 {
         return Value::Error("ERR wrong number of arguments for 'xread' command".into());
     }
