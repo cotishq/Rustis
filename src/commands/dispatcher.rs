@@ -26,6 +26,8 @@ pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
         "exec" => trxns_cmds::cmd_exec(db, args),
         "discard" => trxns_cmds::cmd_discard(db, args),
         "info" => repl_cmds::cmd_info(db, args),
+        "replconf" => repl_cmds::cmd_replconf(db, args),
+        "psync" => repl_cmds::cmd_psync(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }

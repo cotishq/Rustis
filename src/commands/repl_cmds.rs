@@ -1,6 +1,14 @@
 use crate::resp::Value;
 use crate::db::{Db, ServerRole};
 
+pub fn cmd_replconf(_db: &Db, _args: &[Value]) -> Value {
+    Value::SimpleString("OK".into())
+}
+
+pub fn cmd_psync(_db: &Db, _args: &[Value]) -> Value {
+    Value::SimpleString("FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0".into())
+}
+
 fn unpack_bulk_str(value: &Value) -> Result<String, anyhow::Error> {
     match value {
         Value::BulkString(s) => Ok(s.clone()),
