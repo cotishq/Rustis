@@ -5,6 +5,7 @@ use super::list_cmds;
 use super::streams_cmds;
 use super::trxns_cmds;
 use super::repl_cmds;
+use super::persistence_cmds;
 
 pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
     match cmd.to_lowercase().as_str() {
@@ -28,6 +29,7 @@ pub async  fn dispatch(cmd: &str, args: &[Value], db: &Db) -> Value {
         "info" => repl_cmds::cmd_info(db, args),
         "replconf" => repl_cmds::cmd_replconf(db, args),
         "psync" => repl_cmds::cmd_psync(db, args),
+        "config" => persistence_cmds::cmd_config(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }

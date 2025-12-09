@@ -45,6 +45,22 @@ fn parse_args() -> (String, ServerConfig) {
                     i += 1;
                 }
             }
+            "--dir" => {
+                if i + 1 < args.len() {
+                    config.dir = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--dbfilename" => {
+                if i + 1 < args.len() {
+                    config.dbfilename = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
             _ => {
                 i += 1;
             }

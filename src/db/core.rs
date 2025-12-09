@@ -13,12 +13,16 @@ pub enum ServerRole {
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub role: ServerRole,
+    pub dir: Option<String>,
+    pub dbfilename: Option<String>,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             role: ServerRole::Master,
+            dir: None,
+            dbfilename: None,
         }
     }
 }
