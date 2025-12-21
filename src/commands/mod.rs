@@ -5,5 +5,6 @@ pub mod streams_cmds;
 pub mod trxns_cmds;
 pub mod repl_cmds;
 pub mod persistence_cmds;
+pub mod pubsub_cmds;
 
 pub use dispatcher::dispatch;
