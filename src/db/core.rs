@@ -45,6 +45,8 @@ pub struct Db {
 struct Shared {
     state: Mutex<State>,
     notify: Notify,
+    /// Tracks how many clients are subscribed to each channel
+    channel_subscribers: Mutex<HashMap<String, usize>>,
 }
 
 /// Actual data + expiration index
@@ -78,6 +80,7 @@ impl Db {
                 expirations: BTreeMap::new(),
             }),
             notify: Notify::new(),
+            channel_subscribers: Mutex::new(HashMap::new()),
         });
 
         tokio::spawn(clean_expired(shared.clone()));
@@ -398,6 +401,18 @@ impl Db {
         } else {
             idx.min(len - 1)
         }
+    }
+
+    /// Subscribe to a channel, incrementing the global subscriber count
+    pub fn subscribe_channel(&self, channel: &str) {
+        let mut subs = self.shared.channel_subscribers.lock().unwrap();
+        *subs.entry(channel.to_string()).or_insert(0) += 1;
+    }
+
+    /// Get the number of subscribers for a channel
+    pub fn get_channel_subscriber_count(&self, channel: &str) -> usize {
+        let subs = self.shared.channel_subscribers.lock().unwrap();
+        *subs.get(channel).unwrap_or(&0)
     }
 }
 

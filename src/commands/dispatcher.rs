@@ -26,7 +26,17 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
     }
 
     match cmd_lower.as_str() {
-        "ping" => Value::SimpleString("PONG".into()),
+        "ping" => {
+            if client.is_subscribed() {
+                // In subscribed mode, return ["pong", ""] as array
+                Value::Array(vec![
+                    Value::BulkString("pong".into()),
+                    Value::BulkString("".into()),
+                ])
+            } else {
+                Value::SimpleString("PONG".into())
+            }
+        }
         "echo" => args.first().cloned().unwrap_or(Value::SimpleString("".into())),
         "set" => string_cmds::cmd_set(db, args),
         "get" => string_cmds::cmd_get(db, args),
@@ -72,7 +82,8 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         "replconf" => repl_cmds::cmd_replconf(db, args),
         "psync" => repl_cmds::cmd_psync(db, args),
         "config" => persistence_cmds::cmd_config(db, args),
-        "subscribe" => pubsub_cmds::cmd_subscribe(args, &mut client.subscribed_channels),
+        "subscribe" => pubsub_cmds::cmd_subscribe(args, &mut client.subscribed_channels, db),
+        "publish" => pubsub_cmds::cmd_publish(args, db),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
