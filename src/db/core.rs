@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque, BTreeMap};
 use std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use tokio::sync::Notify;
+use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
@@ -41,12 +42,19 @@ pub struct Db {
     pub config: ServerConfig,
 }
 
+/// Message sent through pubsub channels
+#[derive(Clone, Debug)]
+pub struct PubSubMessage {
+    pub channel: String,
+    pub message: String,
+}
+
 /// Internal shared structure
 struct Shared {
     state: Mutex<State>,
     notify: Notify,
-    /// Tracks how many clients are subscribed to each channel
-    channel_subscribers: Mutex<HashMap<String, usize>>,
+    /// Maps channel name to list of subscriber senders
+    pubsub_channels: Mutex<HashMap<String, Vec<mpsc::Sender<PubSubMessage>>>>,
 }
 
 /// Actual data + expiration index
@@ -80,7 +88,7 @@ impl Db {
                 expirations: BTreeMap::new(),
             }),
             notify: Notify::new(),
-            channel_subscribers: Mutex::new(HashMap::new()),
+            pubsub_channels: Mutex::new(HashMap::new()),
         });
 
         tokio::spawn(clean_expired(shared.clone()));
@@ -403,16 +411,41 @@ impl Db {
         }
     }
 
-    /// Subscribe to a channel, incrementing the global subscriber count
-    pub fn subscribe_channel(&self, channel: &str) {
-        let mut subs = self.shared.channel_subscribers.lock().unwrap();
-        *subs.entry(channel.to_string()).or_insert(0) += 1;
+    /// Subscribe to a channel with the given sender for messages
+    pub fn subscribe_channel(&self, channel: &str, sender: mpsc::Sender<PubSubMessage>) {
+        let mut channels = self.shared.pubsub_channels.lock().unwrap();
+        channels
+            .entry(channel.to_string())
+            .or_insert_with(Vec::new)
+            .push(sender);
+    }
+
+    /// Publish a message to a channel, returns the number of subscribers
+    pub fn publish_message(&self, channel: &str, message: &str) -> usize {
+        let mut channels = self.shared.pubsub_channels.lock().unwrap();
+        if let Some(senders) = channels.get_mut(channel) {
+            let msg = PubSubMessage {
+                channel: channel.to_string(),
+                message: message.to_string(),
+            };
+            // Remove closed senders and count successful sends
+            senders.retain(|sender| !sender.is_closed());
+            let mut count = 0;
+            for sender in senders.iter() {
+                if sender.try_send(msg.clone()).is_ok() {
+                    count += 1;
+                }
+            }
+            count
+        } else {
+            0
+        }
     }
 
     /// Get the number of subscribers for a channel
     pub fn get_channel_subscriber_count(&self, channel: &str) -> usize {
-        let subs = self.shared.channel_subscribers.lock().unwrap();
-        *subs.get(channel).unwrap_or(&0)
+        let channels = self.shared.pubsub_channels.lock().unwrap();
+        channels.get(channel).map(|v| v.len()).unwrap_or(0)
     }
 }
 

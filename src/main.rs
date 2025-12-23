@@ -107,71 +107,106 @@ async fn main() {
 
 
 
-async fn handle_connection(mut stream: TcpStream, db: Db) -> Result<()> {
+async fn handle_connection(stream: TcpStream, db: Db) -> Result<()> {
     let mut buffer = BytesMut::with_capacity(512);
     let mut client = ClientState::new();
+    let (mut reader, mut writer) = stream.into_split();
 
     loop {
-        // Process all complete messages in buffer
-        loop {
-            if buffer.is_empty() {
-                break;
-            }
-
-            match resp::parse_message(buffer.clone()) {
-                Ok((value, consumed)) => {
-                    buffer.advance(consumed);
-
-                    // Extract command and args
-                    match extract_command(value) {
-                        Ok((command, args)) => {
-                            println!("Command: {}, Args: {:?}", command, args);
-
-                            let response = if client.in_transaction 
-                                && command != "MULTI" 
-                                && command != "EXEC" 
-                                && command != "DISCARD" 
-                            {
-                                client.queued_commands.push((command.clone(), args));
-                                Value::SimpleString("QUEUED".into())
-                            } else {
-                                dispatch(&command, &args, &db, &mut client).await
-                            };
-
-                            // Send the response
-                            let serialized = resp::serialize(response);
-                            stream.write_all(serialized.as_bytes()).await?;
+        // Check for pubsub messages if subscribed
+        if client.is_subscribed() {
+            tokio::select! {
+                // Wait for pubsub messages
+                Some(msg) = client.pubsub_rx.recv() => {
+                    let response = Value::Array(vec![
+                        Value::BulkString("message".into()),
+                        Value::BulkString(msg.channel),
+                        Value::BulkString(msg.message),
+                    ]);
+                    let serialized = resp::serialize(response);
+                    writer.write_all(serialized.as_bytes()).await?;
+                }
+                // Read more data from client
+                result = reader.read_buf(&mut buffer) => {
+                    match result {
+                        Ok(0) => {
+                            println!("Connection closed");
+                            return Ok(());
                         }
-                        Err(e) => {
-                            eprintln!("Command extraction error: {}", e);
-                            let error = Value::SimpleString("ERR invalid command format".into());
-                            let serialized = resp::serialize(error);
-                            stream.write_all(serialized.as_bytes()).await?;
+                        Ok(_) => {
+                            process_buffer(&mut buffer, &mut writer, &db, &mut client).await?;
                         }
+                        Err(e) => return Err(e.into()),
                     }
                 }
-                Err(_) => {
-                    // Incomplete message, need more data
-                    break;
-                }
             }
-        }
-
-        // Check buffer size limit
-        if buffer.len() > 1024 * 1024 {
-            let error = Value::SimpleString("ERR protocol error: too large bulk count".into());
-            let serialized = resp::serialize(error);
-            stream.write_all(serialized.as_bytes()).await?;
-            return Err(anyhow::anyhow!("Buffer too large"));
-        }
-
-        // Read more data
-        let n = stream.read_buf(&mut buffer).await?;
-        if n == 0 {
-            println!("Connection closed");
-            return Ok(());
+        } else {
+            // Not subscribed - simple read loop
+            let n = reader.read_buf(&mut buffer).await?;
+            if n == 0 {
+                println!("Connection closed");
+                return Ok(());
+            }
+            process_buffer(&mut buffer, &mut writer, &db, &mut client).await?;
         }
     }
+}
+
+use tokio::net::tcp::OwnedWriteHalf;
+
+async fn process_buffer(
+    buffer: &mut BytesMut,
+    writer: &mut OwnedWriteHalf,
+    db: &Db,
+    client: &mut ClientState,
+) -> Result<()> {
+    loop {
+        if buffer.is_empty() {
+            break;
+        }
+
+        match resp::parse_message(buffer.clone()) {
+            Ok((value, consumed)) => {
+                buffer.advance(consumed);
+
+                match extract_command(value) {
+                    Ok((command, args)) => {
+                        println!("Command: {}, Args: {:?}", command, args);
+
+                        let response = if client.in_transaction
+                            && command != "MULTI"
+                            && command != "EXEC"
+                            && command != "DISCARD"
+                        {
+                            client.queued_commands.push((command.clone(), args));
+                            Value::SimpleString("QUEUED".into())
+                        } else {
+                            dispatch(&command, &args, db, client).await
+                        };
+
+                        let serialized = resp::serialize(response);
+                        writer.write_all(serialized.as_bytes()).await?;
+                    }
+                    Err(e) => {
+                        eprintln!("Command extraction error: {}", e);
+                        let error = Value::SimpleString("ERR invalid command format".into());
+                        let serialized = resp::serialize(error);
+                        writer.write_all(serialized.as_bytes()).await?;
+                    }
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
+    if buffer.len() > 1024 * 1024 {
+        let error = Value::SimpleString("ERR protocol error: too large bulk count".into());
+        let serialized = resp::serialize(error);
+        writer.write_all(serialized.as_bytes()).await?;
+        return Err(anyhow::anyhow!("Buffer too large"));
+    }
+
+    Ok(())
 }
 
 fn extract_command(value: Value) -> Result<(String, Vec<Value>)> {

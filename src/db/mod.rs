@@ -1,3 +1,3 @@
 pub mod core;
 
-pub use core::{Db, ServerConfig, ServerRole};
+pub use core::{Db, ServerConfig, ServerRole, PubSubMessage};

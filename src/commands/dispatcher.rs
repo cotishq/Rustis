@@ -82,7 +82,7 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         "replconf" => repl_cmds::cmd_replconf(db, args),
         "psync" => repl_cmds::cmd_psync(db, args),
         "config" => persistence_cmds::cmd_config(db, args),
-        "subscribe" => pubsub_cmds::cmd_subscribe(args, &mut client.subscribed_channels, db),
+        "subscribe" => pubsub_cmds::cmd_subscribe(args, &mut client.subscribed_channels, &client.pubsub_tx, db),
         "publish" => pubsub_cmds::cmd_publish(args, db),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }

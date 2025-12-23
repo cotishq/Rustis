@@ -1,9 +1,15 @@
 use std::collections::HashSet;
+use tokio::sync::mpsc;
 
-use crate::db::Db;
+use crate::db::{Db, PubSubMessage};
 use crate::resp::Value;
 
-pub fn cmd_subscribe(args: &[Value], subscribed_channels: &mut HashSet<String>, db: &Db) -> Value {
+pub fn cmd_subscribe(
+    args: &[Value],
+    subscribed_channels: &mut HashSet<String>,
+    pubsub_tx: &mpsc::Sender<PubSubMessage>,
+    db: &Db,
+) -> Value {
     if args.is_empty() {
         return Value::Error("ERR wrong number of arguments for 'subscribe' command".into());
     }
@@ -13,11 +19,11 @@ pub fn cmd_subscribe(args: &[Value], subscribed_channels: &mut HashSet<String>, 
         _ => return Value::Error("ERR invalid channel name".into()),
     };
 
-    // Only increment global count if this client wasn't already subscribed
+    // Only subscribe if not already subscribed to this channel
     if !subscribed_channels.contains(&channel) {
-        db.subscribe_channel(&channel);
+        db.subscribe_channel(&channel, pubsub_tx.clone());
+        subscribed_channels.insert(channel.clone());
     }
-    subscribed_channels.insert(channel.clone());
 
     Value::Array(vec![
         Value::BulkString("subscribe".into()),
@@ -36,7 +42,12 @@ pub fn cmd_publish(args: &[Value], db: &Db) -> Value {
         _ => return Value::Error("ERR invalid channel name".into()),
     };
 
-    // Return the number of subscribers to this channel
-    let count = db.get_channel_subscriber_count(&channel);
+    let message = match &args[1] {
+        Value::BulkString(s) => s.clone(),
+        _ => return Value::Error("ERR invalid message".into()),
+    };
+
+    // Publish and return the number of subscribers that received the message
+    let count = db.publish_message(&channel, &message);
     Value::Integer(count as i64)
 }
