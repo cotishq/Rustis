@@ -528,25 +528,30 @@ impl Db {
     }
     
     /// Get members from a sorted set by index range. Returns members sorted by score.
-    pub fn zrange(&self, key: &str, start: usize, stop: usize) -> Vec<String> {
+    /// Supports negative indices: -1 is last element, -2 is second last, etc.
+    pub fn zrange(&self, key: &str, start: i64, stop: i64) -> Vec<String> {
         let state = self.shared.state.lock().unwrap();
 
         match state.data.get(key) {
             Some(DbValue::SortedSet { by_score, .. }) => {
-                let len = by_score.len();
-                if start >= len || start > stop {
+                let len = by_score.len() as i64;
+                if len == 0 {
                     return vec![];
                 }
-                let end = stop.min(len - 1);
+                let start = Self::normalize_index(start, len) as usize;
+                let stop = Self::normalize_index(stop, len) as usize;
+                if start > stop || start >= by_score.len() {
+                    return vec![];
+                }
                 by_score
-                   .iter()
-                   .skip(start)
-                   .take(end - start + 1)
-                   .map(|e| e.member.clone())
-                   .collect()  
+                    .iter()
+                    .skip(start)
+                    .take(stop - start + 1)
+                    .map(|e| e.member.clone())
+                    .collect()
+            }
+            _ => vec![],
         }
-        _ => vec![],
-    }
     }
 }
 

@@ -73,7 +73,7 @@ pub fn cmd_zrange(db: &Db, args: &[Value]) -> Value {
         Err(_) => return Value::Error("ERR invalid start index".into()),
     };
 
-    let start: usize = match start_str.parse() {
+    let start: i64 = match start_str.parse() {
         Ok(s) => s,
         Err(_) => return Value::Error("ERR value is not an integer or out of range".into()),
     };
@@ -83,7 +83,7 @@ pub fn cmd_zrange(db: &Db, args: &[Value]) -> Value {
         Err(_) => return Value::Error("ERR invalid stop index".into()),
     };
 
-    let stop: usize = match stop_str.parse() {
+    let stop: i64 = match stop_str.parse() {
         Ok(s) => s,
         Err(_) => return Value::Error("ERR value is not an integer or out of range".into()),
     };
