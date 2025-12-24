@@ -526,6 +526,28 @@ impl Db {
             _ => None,
         }
     }
+    
+    /// Get members from a sorted set by index range. Returns members sorted by score.
+    pub fn zrange(&self, key: &str, start: usize, stop: usize) -> Vec<String> {
+        let state = self.shared.state.lock().unwrap();
+
+        match state.data.get(key) {
+            Some(DbValue::SortedSet { by_score, .. }) => {
+                let len = by_score.len();
+                if start >= len || start > stop {
+                    return vec![];
+                }
+                let end = stop.min(len - 1);
+                by_score
+                   .iter()
+                   .skip(start)
+                   .take(end - start + 1)
+                   .map(|e| e.member.clone())
+                   .collect()  
+        }
+        _ => vec![],
+    }
+    }
 }
 
 /// Background task to remove expired keys

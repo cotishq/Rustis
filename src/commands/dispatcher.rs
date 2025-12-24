@@ -87,6 +87,7 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         "publish" => pubsub_cmds::cmd_publish(args, db),
         "zadd" => sets_cmd::cmd_zadd(db, args),
         "zrank" => sets_cmd::cmd_zrank(db, args),
+        "zrange" => sets_cmd::cmd_zrange(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
@@ -113,6 +114,7 @@ async fn dispatch_inner(cmd: &str, args: &[Value], db: &Db) -> Value {
         "config" => persistence_cmds::cmd_config(db, args),
         "zadd" => sets_cmd::cmd_zadd(db, args),
         "zrank" => sets_cmd::cmd_zrank(db, args),
+        "zrange" => sets_cmd::cmd_zrange(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }

@@ -57,3 +57,37 @@ pub fn cmd_zrank(db: &Db, args: &[Value]) -> Value {
         None => Value::NullBulk,
     }
 }
+
+pub fn cmd_zrange(db: &Db, args: &[Value]) -> Value {
+    if args.len() < 3 {
+        return Value::Error("ERR wrong number of arguments for 'zrange' command".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::Error("ERR invalid key".into()),
+    };
+
+    let start_str = match unpack_bulk_str(&args[1]) {
+        Ok(s) => s,
+        Err(_) => return Value::Error("ERR invalid start index".into()),
+    };
+
+    let start: usize = match start_str.parse() {
+        Ok(s) => s,
+        Err(_) => return Value::Error("ERR value is not an integer or out of range".into()),
+    };
+
+    let stop_str = match unpack_bulk_str(&args[2]) {
+        Ok(s) => s,
+        Err(_) => return Value::Error("ERR invalid stop index".into()),
+    };
+
+    let stop: usize = match stop_str.parse() {
+        Ok(s) => s,
+        Err(_) => return Value::Error("ERR value is not an integer or out of range".into()),
+    };
+
+    let members = db.zrange(&key, start, stop);
+    Value::Array(members.into_iter().map(Value::BulkString).collect())
+}
