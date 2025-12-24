@@ -575,6 +575,26 @@ impl Db {
             _ => None,  
         }
     }
+
+    /// Remove a member from a sorted set. Returns 1 if member was removed, 0 otherwise.
+    pub fn zrem(&self, key: &str, member: &str) -> usize {
+        let mut state = self.shared.state.lock().unwrap();
+
+        match state.data.get_mut(key) {
+            Some(DbValue::SortedSet { by_score, by_member }) => {
+                if let Some(score) = by_member.remove(member) {
+                    by_score.remove(&SortedSetEntry {
+                        score,
+                        member: member.to_string(),
+                    });
+                    1
+                } else {
+                    0
+                }
+            }
+            _ => 0,
+        }
+    }
 }
 
 /// Background task to remove expired keys
