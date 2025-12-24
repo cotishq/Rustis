@@ -1,9 +1,32 @@
-use std::collections::{HashMap, VecDeque, BTreeMap};
+use std::collections::{HashMap, VecDeque, BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant};
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SortedSetEntry {
+    pub score: f64,
+    pub member: String,
+}
+
+impl Eq for SortedSetEntry {}
+
+impl PartialOrd for SortedSetEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SortedSetEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.score.partial_cmp(&other.score) {
+            Some(std::cmp::Ordering::Equal) | None => self.member.cmp(&other.member),
+            Some(ord) => ord,
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum ServerRole {
@@ -33,6 +56,10 @@ pub enum DbValue {
     String(Bytes),
     List(VecDeque<Bytes>),
     Stream(Vec<StreamEntry>),
+    SortedSet {
+        by_score: BTreeSet<SortedSetEntry>,
+        by_member: HashMap<String, f64>,
+    },
 }
 
 /// Main database handle (clonable)
@@ -69,6 +96,7 @@ impl DbValue {
             DbValue::String(_) => "string",
             DbValue::List(_) => "list",
             DbValue::Stream(_) => "stream",
+            DbValue::SortedSet { .. } => "zset",
         }
     }
 }
@@ -446,6 +474,38 @@ impl Db {
     pub fn get_channel_subscriber_count(&self, channel: &str) -> usize {
         let channels = self.shared.pubsub_channels.lock().unwrap();
         channels.get(channel).map(|v| v.len()).unwrap_or(0)
+    }
+
+    /// Add member(s) to a sorted set. Returns the number of new member added
+    pub fn zadd(&self, key: String, score: f64, member: String) -> usize {
+        let mut state = self.shared.state.lock().unwrap();
+
+        let zset = state.data.entry(key).or_insert_with(|| DbValue::SortedSet { by_score: BTreeSet::new(), by_member: HashMap::new() 
+        });
+
+        if let DbValue::SortedSet { by_score, by_member } = zset {
+            if let Some(&old_score) = by_member.get(&member) {
+                by_score.remove(&SortedSetEntry {
+                    score: old_score,
+                    member: member.clone(),
+                });
+                by_score.insert(SortedSetEntry {
+                    score,
+                    member: member.clone(),
+                });
+                by_member.insert(member, score);
+                0
+        } else {
+            by_score.insert(SortedSetEntry {
+                score,
+                member: member.clone(),
+            });
+            by_member.insert(member, score);
+            1
+        }
+    } else {
+        0
+    }
     }
 }
 
