@@ -564,6 +564,17 @@ impl Db {
             _ => 0, 
         }
     }
+    /// Get the score of a member in a sorted set. Returns None if key or member doesn't exist.
+    pub fn zscore(&self, key: &str, member: &str) -> Option<f64> {
+        let state = self.shared.state.lock().unwrap();
+
+        match state.data.get(key) {
+            Some(DbValue::SortedSet {
+                by_member, .. 
+            }) => by_member.get(member).copied(),
+            _ => None,  
+        }
+    }
 }
 
 /// Background task to remove expired keys

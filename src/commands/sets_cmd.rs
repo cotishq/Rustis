@@ -104,3 +104,24 @@ pub fn cmd_zcard(db: &Db, args: &[Value]) -> Value {
 
     Value::Integer(db.zcard(&key) as i64)
 }
+
+pub fn cmd_zscore(db: &Db, args: &[Value]) -> Value {
+    if args.len() < 2 {
+        return Value::Error("ERR wrong number of arguments for 'zscore' command".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::Error("ERR invalid key".into()),
+    };
+
+    let member = match unpack_bulk_str(&args[1]) {
+        Ok(m) => m,
+        Err(_) => return Value::Error("ERR invalid member".into()),
+    };
+
+    match db.zscore(&key, &member) {
+        Some(score) => Value::BulkString(score.to_string()),
+        None => Value::NullBulk,
+    }
+}
