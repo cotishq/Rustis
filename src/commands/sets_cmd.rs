@@ -36,3 +36,24 @@ pub fn cmd_zadd(db: &Db, args: &[Value]) -> Value {
     let added = db.zadd(key, score, member);
     Value::Integer(added as i64)
 }
+
+pub fn cmd_zrank(db: &Db, args: &[Value]) -> Value {
+    if args.len() < 2 {
+        return Value::Error("ERR wrong number of arguments for 'zrank' command".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::Error("ERR invalid key".into()),
+    };
+
+    let member = match unpack_bulk_str(&args[1]) {
+        Ok(m) => m,
+        Err(_) => return Value::Error("ERR invalid member".into()),
+    };
+
+    match db.zrank(&key, &member) {
+        Some(rank) => Value::Integer(rank as i64),
+        None => Value::NullBulk,
+    }
+}

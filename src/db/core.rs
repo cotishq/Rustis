@@ -507,6 +507,25 @@ impl Db {
         0
     }
     }
+
+    /// Get the rank of a member in a sorted set. Returns None if key or member doesn't exist.
+    pub fn zrank(&self, key: &str, member: &str) -> Option<usize> {
+        let state = self.shared.state.lock().unwrap();
+
+        match state.data.get(key) {
+            Some(DbValue::SortedSet {
+                by_score, by_member
+            }) => {
+                let score = by_member.get(member)?;
+                let entry = SortedSetEntry {
+                    score: *score,
+                    member: member.to_string(),
+                };
+                by_score.iter().position(|e| e == &entry)
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Background task to remove expired keys
