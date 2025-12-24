@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque, BTreeMap, BTreeSet};
+use std::os::linux::raw::stat;
 use std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use tokio::sync::Notify;
@@ -526,7 +527,7 @@ impl Db {
             _ => None,
         }
     }
-    
+
     /// Get members from a sorted set by index range. Returns members sorted by score.
     /// Supports negative indices: -1 is last element, -2 is second last, etc.
     pub fn zrange(&self, key: &str, start: i64, stop: i64) -> Vec<String> {
@@ -551,6 +552,16 @@ impl Db {
                     .collect()
             }
             _ => vec![],
+        }
+    }
+
+    /// Get the cardinality (number of elements) of a sorted set.
+    pub fn zcard(&self, key: &str) -> usize {
+        let state = self.shared.state.lock().unwrap();
+
+        match state.data.get(key) {
+            Some(DbValue::SortedSet { by_member, .. }) => by_member.len(),
+            _ => 0, 
         }
     }
 }

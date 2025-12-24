@@ -91,3 +91,16 @@ pub fn cmd_zrange(db: &Db, args: &[Value]) -> Value {
     let members = db.zrange(&key, start, stop);
     Value::Array(members.into_iter().map(Value::BulkString).collect())
 }
+
+pub fn cmd_zcard(db: &Db, args: &[Value]) -> Value {
+    if args.is_empty() {
+        return Value::Error("ERR wrong number of arguments for 'zcard' command".into());
+    }
+
+    let key = match unpack_bulk_str(&args[0]) {
+        Ok(k) => k,
+        Err(_) => return Value::Error("ERR invalid key".into()),
+    };
+
+    Value::Integer(db.zcard(&key) as i64)
+}

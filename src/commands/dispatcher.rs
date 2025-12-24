@@ -88,6 +88,7 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         "zadd" => sets_cmd::cmd_zadd(db, args),
         "zrank" => sets_cmd::cmd_zrank(db, args),
         "zrange" => sets_cmd::cmd_zrange(db, args),
+        "zcard" => sets_cmd::cmd_zcard(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
@@ -115,6 +116,7 @@ async fn dispatch_inner(cmd: &str, args: &[Value], db: &Db) -> Value {
         "zadd" => sets_cmd::cmd_zadd(db, args),
         "zrank" => sets_cmd::cmd_zrank(db, args),
         "zrange" => sets_cmd::cmd_zrange(db, args),
+        "zcard" => sets_cmd::cmd_zcard(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
