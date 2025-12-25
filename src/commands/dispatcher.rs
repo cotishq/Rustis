@@ -8,6 +8,7 @@ use super::repl_cmds;
 use super::persistence_cmds;
 use super::pubsub_cmds;
 use super::sets_cmd;
+use super::geospatial_cmds;
 
 fn is_allowed_in_subscribed_mode(cmd: &str) -> bool {
     matches!(
@@ -91,6 +92,7 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         "zcard" => sets_cmd::cmd_zcard(db, args),
         "zscore" => sets_cmd::cmd_zscore(db, args),
         "zrem" => sets_cmd::cmd_zrem(db, args),
+        "geoadd" => geospatial_cmds::cmd_geoadd(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
@@ -121,6 +123,7 @@ async fn dispatch_inner(cmd: &str, args: &[Value], db: &Db) -> Value {
         "zcard" => sets_cmd::cmd_zcard(db, args),
         "zscore" => sets_cmd::cmd_zscore(db, args),
         "zrem" => sets_cmd::cmd_zrem(db, args),
+        "geoadd" => geospatial_cmds::cmd_geoadd(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
