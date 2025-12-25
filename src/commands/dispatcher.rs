@@ -93,6 +93,7 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         "zscore" => sets_cmd::cmd_zscore(db, args),
         "zrem" => sets_cmd::cmd_zrem(db, args),
         "geoadd" => geospatial_cmds::cmd_geoadd(db, args),
+        "geopos" => geospatial_cmds::cmd_geopos(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
@@ -124,6 +125,7 @@ async fn dispatch_inner(cmd: &str, args: &[Value], db: &Db) -> Value {
         "zscore" => sets_cmd::cmd_zscore(db, args),
         "zrem" => sets_cmd::cmd_zrem(db, args),
         "geoadd" => geospatial_cmds::cmd_geoadd(db, args),
+        "geopos" => geospatial_cmds::cmd_geopos(db, args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }

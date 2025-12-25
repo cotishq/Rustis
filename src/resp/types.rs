@@ -6,6 +6,7 @@ pub enum Value {
     Integer(i64),
     Array(Vec<Value>),
     NullBulk,
+    NullArray,
 }
 
 impl Value {
@@ -33,6 +34,7 @@ impl Value {
             },
 
             Value::NullBulk => "$-1\r\n".to_string(),
+            Value::NullArray => "*-1\r\n".to_string(),
         }
     }
 }
