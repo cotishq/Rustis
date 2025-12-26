@@ -8,5 +8,6 @@ pub mod persistence_cmds;
 pub mod pubsub_cmds;
 pub mod sets_cmd;
 pub mod geospatial_cmds;
+pub mod auth_cmds;
 
 pub use dispatcher::dispatch;
