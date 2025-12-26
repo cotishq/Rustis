@@ -27,6 +27,16 @@ fn sha256_hex(password: &str) -> String {
     format!("{:x}", result)
 }
 
+pub fn is_default_user_nopass() -> bool {
+    let guard = get_or_init_users();
+    let users = guard.as_ref().unwrap();
+    if let Some(user) = users.get("default") {
+        user.passwords.is_empty()
+    } else {
+        true
+    }
+}
+
 pub fn cmd_acl(args: &[Value]) -> Value {
     if args.is_empty() {
         return Value::Error("ERR wrong number of arguments for 'acl' command".into());
@@ -105,7 +115,9 @@ pub fn cmd_acl(args: &[Value]) -> Value {
     }
 }
 
-pub fn cmd_auth(args: &[Value]) -> Value {
+use crate::client::ClientState;
+
+pub fn cmd_auth(args: &[Value], client: &mut ClientState) -> Value {
     if args.len() < 2 {
         return Value::Error("ERR wrong number of arguments for 'auth' command".into());
     }
@@ -126,6 +138,7 @@ pub fn cmd_auth(args: &[Value]) -> Value {
     if let Some(user) = users.get(&username) {
         let password_hash = sha256_hex(&password);
         if user.passwords.contains(&password_hash) {
+            client.authenticated = true;
             Value::SimpleString("OK".into())
         } else {
             Value::Error("WRONGPASS invalid username-password pair or user is disabled.".into())

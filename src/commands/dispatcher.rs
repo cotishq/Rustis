@@ -28,6 +28,10 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         ));
     }
 
+    if !client.authenticated && cmd_lower != "auth" {
+        return Value::Error("NOAUTH Authentication required.".into());
+    }
+
     match cmd_lower.as_str() {
         "ping" => {
             if client.is_subscribed() {
@@ -98,7 +102,7 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         "geodist" => geospatial_cmds::cmd_geodist(db, args),
         "geosearch" => geospatial_cmds::cmd_geosearch(db, args),
         "acl" => auth_cmds::cmd_acl(args),
-        "auth" => auth_cmds::cmd_auth(args),
+        "auth" => auth_cmds::cmd_auth(args, client),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
@@ -134,7 +138,6 @@ async fn dispatch_inner(cmd: &str, args: &[Value], db: &Db) -> Value {
         "geodist" => geospatial_cmds::cmd_geodist(db, args),
         "geosearch" => geospatial_cmds::cmd_geosearch(db, args),
         "acl" => auth_cmds::cmd_acl(args),
-        "auth" => auth_cmds::cmd_auth(args),
         c => Value::Error(format!("ERR unknown command '{}'", c)),
     }
 }
