@@ -25,7 +25,11 @@ pub fn cmd_acl(args: &[Value]) -> Value {
             if username == "default" {
                 Value::Array(vec![
                     Value::BulkString("flags".into()),
-                    Value::Array(vec![]),
+                    Value::Array(vec![
+                        Value::BulkString("nopass".into()),
+                    ]),
+                    Value::BulkString("passwords".into()),
+                    Value::Array(vec![])
                 ])
             } else {
                 Value::NullBulk
