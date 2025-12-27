@@ -470,12 +470,6 @@ impl Db {
         }
     }
 
-    /// Get the number of subscribers for a channel
-    pub fn get_channel_subscriber_count(&self, channel: &str) -> usize {
-        let channels = self.shared.pubsub_channels.lock().unwrap();
-        channels.get(channel).map(|v| v.len()).unwrap_or(0)
-    }
-
     /// Add member(s) to a sorted set. Returns the number of new member added
     pub fn zadd(&self, key: String, score: f64, member: String) -> usize {
         let mut state = self.shared.state.lock().unwrap();
