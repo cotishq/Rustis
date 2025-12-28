@@ -51,3 +51,26 @@ pub fn cmd_publish(args: &[Value], db: &Db) -> Value {
     let count = db.publish_message(&channel, &message);
     Value::Integer(count as i64)
 }
+
+pub fn cmd_unsubscribe(
+    args: &[Value],
+    subscribed_channels: &mut HashSet<String>,
+) -> Value {
+    if args.is_empty() {
+        return Value::Error("ERR wrong number of arguments for 'unsubscribe' command".into());
+    }
+
+    let channel = match &args[0] {
+        Value::BulkString(s) => s.clone(),
+        _ => return Value::Error("ERR invalid channel name".into()),
+    };
+
+    // Remove from local tracking (actual channel cleanup happens when sender is dropped/closed)
+    subscribed_channels.remove(&channel);
+
+    Value::Array(vec![
+        Value::BulkString("unsubscribe".into()),
+        Value::BulkString(channel),
+        Value::Integer(subscribed_channels.len() as i64),
+    ])
+}

@@ -91,6 +91,7 @@ pub async fn dispatch(cmd: &str, args: &[Value], db: &Db, client: &mut ClientSta
         "config" => persistence_cmds::cmd_config(db, args),
         "keys" => persistence_cmds::cmd_keys(db, args),
         "subscribe" => pubsub_cmds::cmd_subscribe(args, &mut client.subscribed_channels, &client.pubsub_tx, db),
+        "unsubscribe" => pubsub_cmds::cmd_unsubscribe(args, &mut client.subscribed_channels),
         "publish" => pubsub_cmds::cmd_publish(args, db),
         "zadd" => sets_cmd::cmd_zadd(db, args),
         "zrank" => sets_cmd::cmd_zrank(db, args),
