@@ -1,4 +1,4 @@
 mod parser;
 
-pub use parser::RdbParser;
+pub use parser::load_rdb;
 

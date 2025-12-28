@@ -1,9 +1,14 @@
 use std::collections::{HashMap, VecDeque, BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 use bytes::Bytes;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant};
+
+mod rdb {
+    pub use crate::rdb::load_rdb;
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SortedSetEntry {
@@ -110,10 +115,36 @@ pub struct StreamEntry{
 impl Db {
     /// Create a new DB and start background task
     pub fn new(config: ServerConfig) -> Self {
+        let mut initial_data = HashMap::new();
+        let mut initial_expirations = BTreeMap::new();
+
+        // Load RDB file if configured
+        let rdb_entries = rdb::load_rdb(
+            config.dir.as_deref(),
+            config.dbfilename.as_deref(),
+        );
+
+        let now = SystemTime::now();
+        for (key, entry) in rdb_entries {
+            // Check if the key has expired
+            if let Some(expire_at) = entry.expire_at {
+                if expire_at <= now {
+                    // Skip expired keys
+                    continue;
+                }
+                // Calculate duration until expiration
+                if let Ok(duration) = expire_at.duration_since(now) {
+                    let when = Instant::now() + duration;
+                    initial_expirations.insert(when, key.clone());
+                }
+            }
+            initial_data.insert(key, DbValue::String(Bytes::from(entry.value)));
+        }
+
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
-                data: HashMap::new(),
-                expirations: BTreeMap::new(),
+                data: initial_data,
+                expirations: initial_expirations,
             }),
             notify: Notify::new(),
             pubsub_channels: Mutex::new(HashMap::new()),
@@ -175,6 +206,12 @@ impl Db {
             Some(DbValue::String(bytes)) => Some(bytes.clone()),
             _ => None,
         }
+    }
+
+    /// Get all keys matching a pattern (currently only supports "*")
+    pub fn keys(&self, _pattern: &str) -> Vec<String> {
+        let state = self.shared.state.lock().unwrap();
+        state.data.keys().cloned().collect()
     }
 
     /// Increment a string value by 1, returns the new value or error

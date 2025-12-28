@@ -6,6 +6,7 @@ use anyhow::Result;
 
 mod resp;
 mod db;
+mod rdb;
 mod commands;
 mod replication;
 mod client;

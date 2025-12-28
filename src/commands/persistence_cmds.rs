@@ -52,3 +52,22 @@ fn cmd_config_get(db: &Db, args: &[Value]) -> Value {
         _ => Value::Array(vec![]),
     }
 }
+
+pub fn cmd_keys(db: &Db, args: &[Value]) -> Value {
+    if args.is_empty() {
+        return Value::Error("ERR wrong number of arguments for 'keys' command".into());
+    }
+
+    let pattern = match unpack_bulk_str(&args[0]) {
+        Ok(p) => p,
+        Err(_) => return Value::Error("ERR invalid pattern".into()),
+    };
+
+    // Currently only supports "*" pattern
+    if pattern != "*" {
+        return Value::Error("ERR only '*' pattern is supported".into());
+    }
+
+    let keys = db.keys(&pattern);
+    Value::Array(keys.into_iter().map(Value::BulkString).collect())
+}
