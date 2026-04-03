@@ -13,7 +13,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::prelude::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Tabs};
+use ratatui::widgets::{Block, Borders, Paragraph};
 
 #[derive(Clone, Debug)]
 enum RespValue {
@@ -24,6 +24,129 @@ enum RespValue {
     Array(Vec<RespValue>),
     NullBulk,
     NullArray,
+}
+
+const COMMAND_CATALOG: &[(&str, &str)] = &[
+    ("PING", "PING"),
+    ("ECHO", "ECHO <message>"),
+    ("SET", "SET <key> <value>"),
+    ("GET", "GET <key>"),
+    ("INCR", "INCR <key>"),
+    ("LPUSH", "LPUSH <list> <item...>"),
+    ("RPUSH", "RPUSH <list> <item...>"),
+    ("LLEN", "LLEN <list>"),
+    ("LRANGE", "LRANGE <list> <start> <stop>"),
+    ("LPOP", "LPOP <list>"),
+    ("TYPE", "TYPE <key>"),
+    ("XADD", "XADD <stream> * <field> <value>"),
+    ("XRANGE", "XRANGE <stream> <start> <end>"),
+    ("XREAD", "XREAD [COUNT n] STREAMS <stream> <id>"),
+    ("MULTI", "MULTI"),
+    ("EXEC", "EXEC"),
+    ("DISCARD", "DISCARD"),
+    ("INFO", "INFO"),
+    ("REPLCONF", "REPLCONF <arg> <value>"),
+    ("PSYNC", "PSYNC <replicationid> <offset>"),
+    ("CONFIG", "CONFIG GET <param>"),
+    ("KEYS", "KEYS <pattern>"),
+    ("SUBSCRIBE", "SUBSCRIBE <channel...>"),
+    ("UNSUBSCRIBE", "UNSUBSCRIBE [channel...]"),
+    ("PUBLISH", "PUBLISH <channel> <message>"),
+    ("ZADD", "ZADD <key> <score> <member> [score member...]"),
+    ("ZRANK", "ZRANK <key> <member>"),
+    ("ZRANGE", "ZRANGE <key> <start> <stop>"),
+    ("ZCARD", "ZCARD <key>"),
+    ("ZSCORE", "ZSCORE <key> <member>"),
+    ("ZREM", "ZREM <key> <member...>"),
+    ("GEOADD", "GEOADD <key> <lon> <lat> <member> [lon lat member...]"),
+    ("GEOPOS", "GEOPOS <key> <member...>"),
+    ("GEODIST", "GEODIST <key> <member1> <member2> [unit]"),
+    ("GEOSEARCH", "GEOSEARCH <key> ..."),
+    ("ACL", "ACL LIST"),
+    ("AUTH", "AUTH <password>"),
+];
+
+#[derive(Clone, Copy)]
+struct Theme {
+    name: &'static str,
+    header_border: Color,
+    header_title: Color,
+    header_host: Color,
+    history_border: Color,
+    history_text: Color,
+    side_border: Color,
+    side_text: Color,
+    input_border: Color,
+    input_text: Color,
+    status_connected: Color,
+    status_disconnected: Color,
+    cmd_text: Color,
+    ok_text: Color,
+    err_text: Color,
+    int_text: Color,
+    nil_text: Color,
+    muted_text: Color,
+}
+
+const THEMES: [Theme; 2] = [
+    Theme {
+        name: "Neon",
+        header_border: Color::Blue,
+        header_title: Color::Green,
+        header_host: Color::Cyan,
+        history_border: Color::Blue,
+        history_text: Color::Cyan,
+        side_border: Color::Green,
+        side_text: Color::White,
+        input_border: Color::Yellow,
+        input_text: Color::White,
+        status_connected: Color::Green,
+        status_disconnected: Color::Red,
+        cmd_text: Color::LightCyan,
+        ok_text: Color::Green,
+        err_text: Color::Red,
+        int_text: Color::Yellow,
+        nil_text: Color::DarkGray,
+        muted_text: Color::DarkGray,
+    },
+    Theme {
+        name: "Amber",
+        header_border: Color::LightYellow,
+        header_title: Color::Yellow,
+        header_host: Color::LightBlue,
+        history_border: Color::Yellow,
+        history_text: Color::LightYellow,
+        side_border: Color::LightMagenta,
+        side_text: Color::White,
+        input_border: Color::LightRed,
+        input_text: Color::White,
+        status_connected: Color::LightGreen,
+        status_disconnected: Color::LightRed,
+        cmd_text: Color::LightBlue,
+        ok_text: Color::LightGreen,
+        err_text: Color::LightRed,
+        int_text: Color::LightYellow,
+        nil_text: Color::Gray,
+        muted_text: Color::Gray,
+    },
+];
+
+#[derive(Clone, Copy)]
+enum HistoryKind {
+    Info,
+    Command,
+    Ok,
+    Error,
+    Integer,
+    Nil,
+    Value,
+    Muted,
+}
+
+#[derive(Clone)]
+struct HistoryLine {
+    text: String,
+    kind: HistoryKind,
 }
 
 pub fn run(host: &str, port: &str) -> Result<()> {
@@ -74,13 +197,19 @@ struct App {
     host: String,
     port: String,
     input: String,
-    history: Vec<String>,
+    history: Vec<HistoryLine>,
     status: String,
-    tab_idx: usize,
     input_mode: bool,
     connected: bool,
     should_quit: bool,
     socket: Option<TcpStream>,
+    command_history: Vec<String>,
+    history_cursor: Option<usize>,
+    history_draft: String,
+    completion_prefix: String,
+    completion_candidates: Vec<String>,
+    completion_idx: usize,
+    theme_idx: usize,
 }
 
 impl App {
@@ -89,13 +218,22 @@ impl App {
             host,
             port,
             input: String::new(),
-            history: vec!["Press 'i' to type, Enter to run command, 'q' to quit.".to_string()],
+            history: vec![HistoryLine {
+                text: "Press 'i' to type, Enter to run command, 'q' to quit.".to_string(),
+                kind: HistoryKind::Info,
+            }],
             status: "Disconnected".to_string(),
-            tab_idx: 0,
             input_mode: false,
             connected: false,
             should_quit: false,
             socket: None,
+            command_history: Vec::new(),
+            history_cursor: None,
+            history_draft: String::new(),
+            completion_prefix: String::new(),
+            completion_candidates: Vec::new(),
+            completion_idx: 0,
+            theme_idx: 0,
         }
     }
 
@@ -131,13 +269,19 @@ impl App {
                 KeyCode::Enter => self.execute_input(),
                 KeyCode::Backspace => {
                     self.input.pop();
+                    self.reset_edit_state();
                 }
                 KeyCode::Char(c) => {
-                    if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) && (c == 't' || c == 'T') {
+                        self.cycle_theme();
+                    } else if !key.modifiers.contains(KeyModifiers::CONTROL) {
                         self.input.push(c);
+                        self.reset_edit_state();
                     }
                 }
-                KeyCode::Tab => self.tab_idx = (self.tab_idx + 1) % 3,
+                KeyCode::Up => self.recall_previous_command(),
+                KeyCode::Down => self.recall_next_command(),
+                KeyCode::Tab => self.autocomplete_command(),
                 _ => {}
             }
             return;
@@ -147,7 +291,8 @@ impl App {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('i') => self.input_mode = true,
             KeyCode::Char('r') => self.connect(),
-            KeyCode::Tab => self.tab_idx = (self.tab_idx + 1) % 3,
+            KeyCode::Char('t') => self.cycle_theme(),
+            KeyCode::F(2) => self.cycle_theme(),
             _ => {}
         }
     }
@@ -156,16 +301,22 @@ impl App {
         let cmd = self.input.trim().to_string();
         if cmd.is_empty() {
             self.input.clear();
+            self.clear_navigation_state();
             return;
         }
 
         if cmd.eq_ignore_ascii_case("clear") {
             self.history.clear();
             self.input.clear();
+            self.clear_navigation_state();
             return;
         }
 
-        self.history.push(format!("rustis> {}", cmd));
+        self.command_history.push(cmd.clone());
+        self.history.push(HistoryLine {
+            text: format!("rustis> {}", cmd),
+            kind: HistoryKind::Command,
+        });
 
         if !self.connected || self.socket.is_none() {
             self.connect();
@@ -180,7 +331,10 @@ impl App {
                 self.status = format!("Executed: {}", cmd.split_whitespace().next().unwrap_or(""));
             }
             Err(e) => {
-                self.history.push(format!("(error) {}", e));
+                self.history.push(HistoryLine {
+                    text: format!("(error) {}", e),
+                    kind: HistoryKind::Error,
+                });
                 self.status = format!("Command failed: {}", e);
                 self.connected = false;
                 self.socket = None;
@@ -192,6 +346,7 @@ impl App {
         }
 
         self.input.clear();
+        self.clear_navigation_state();
     }
 
     fn send_command(&mut self, input: &str) -> Result<RespValue> {
@@ -209,21 +364,126 @@ impl App {
         read_resp_value(socket).context("failed to read server response")
     }
 
-    fn visible_history(&self, max_rows: usize) -> Vec<String> {
+    fn visible_history(&self, max_rows: usize) -> Vec<HistoryLine> {
         if self.history.len() <= max_rows {
             return self.history.clone();
         }
         self.history[self.history.len().saturating_sub(max_rows)..].to_vec()
     }
+
+    fn theme(&self) -> &'static Theme {
+        &THEMES[self.theme_idx]
+    }
+
+    fn cycle_theme(&mut self) {
+        self.theme_idx = (self.theme_idx + 1) % THEMES.len();
+        self.status = format!("Theme: {}", self.theme().name);
+    }
+
+    fn reset_edit_state(&mut self) {
+        self.history_cursor = None;
+        self.history_draft.clear();
+        self.completion_prefix.clear();
+        self.completion_candidates.clear();
+        self.completion_idx = 0;
+    }
+
+    fn clear_navigation_state(&mut self) {
+        self.history_cursor = None;
+        self.history_draft.clear();
+        self.completion_prefix.clear();
+        self.completion_candidates.clear();
+        self.completion_idx = 0;
+    }
+
+    fn recall_previous_command(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        match self.history_cursor {
+            Some(idx) if idx > 0 => self.history_cursor = Some(idx - 1),
+            Some(_) => {}
+            None => {
+                self.history_draft = self.input.clone();
+                self.history_cursor = Some(self.command_history.len() - 1);
+            }
+        }
+
+        if let Some(idx) = self.history_cursor {
+            self.input = self.command_history[idx].clone();
+        }
+        self.completion_prefix.clear();
+        self.completion_candidates.clear();
+        self.completion_idx = 0;
+    }
+
+    fn recall_next_command(&mut self) {
+        let Some(idx) = self.history_cursor else {
+            return;
+        };
+
+        if idx + 1 < self.command_history.len() {
+            self.history_cursor = Some(idx + 1);
+            self.input = self.command_history[idx + 1].clone();
+        } else {
+            self.history_cursor = None;
+            self.input = std::mem::take(&mut self.history_draft);
+        }
+
+        self.completion_prefix.clear();
+        self.completion_candidates.clear();
+        self.completion_idx = 0;
+    }
+
+    fn autocomplete_command(&mut self) {
+        let leading = self.input.len() - self.input.trim_start().len();
+        let prefix_source = self.input.trim_start();
+
+        if prefix_source.contains(char::is_whitespace) {
+            self.status = "Autocomplete applies to command name (first token)".to_string();
+            return;
+        }
+
+        let prefix = prefix_source.to_ascii_uppercase();
+        if self.completion_prefix != prefix {
+            self.completion_prefix = prefix.clone();
+            self.completion_candidates = COMMAND_CATALOG
+                .iter()
+                .map(|(name, _)| (*name).to_string())
+                .filter(|name| name.starts_with(&prefix))
+                .collect();
+            self.completion_idx = 0;
+        } else if !self.completion_candidates.is_empty() {
+            self.completion_idx = (self.completion_idx + 1) % self.completion_candidates.len();
+        }
+
+        if self.completion_candidates.is_empty() {
+            self.status = format!("No command match for '{}'", prefix);
+            return;
+        }
+
+        let completed = &self.completion_candidates[self.completion_idx];
+        let left_pad = &self.input[..leading];
+        self.input = format!("{}{} ", left_pad, completed);
+        self.history_cursor = None;
+        self.history_draft.clear();
+        self.status = format!(
+            "Autocomplete {}/{}: {}",
+            self.completion_idx + 1,
+            self.completion_candidates.len(),
+            completed
+        );
+    }
 }
 
 fn ui(frame: &mut ratatui::Frame, app: &App) {
+    let theme = app.theme();
     let size = frame.area();
 
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Min(8),
             Constraint::Length(3),
@@ -232,70 +492,61 @@ fn ui(frame: &mut ratatui::Frame, app: &App) {
         .split(size);
 
     let header = Paragraph::new(Line::from(vec![
-        Span::styled("Rustis TUI Client", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            format!("Rustis TUI Client [{}]", theme.name),
+            Style::default()
+                .fg(theme.header_title)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" - connected to "),
-        Span::styled(format!("{}:{}", app.host, app.port), Style::default().fg(Color::Cyan)),
+        Span::styled(
+            format!("{}:{}", app.host, app.port),
+            Style::default().fg(theme.header_host),
+        ),
     ]))
-    .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Blue)));
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.header_border)),
+    );
     frame.render_widget(header, sections[0]);
-
-    let tab_titles = ["Terminal", "Commands", "Monitor"]
-        .iter()
-        .map(|t| Line::from(Span::raw(*t)))
-        .collect::<Vec<_>>();
-    let tabs = Tabs::new(tab_titles)
-        .select(app.tab_idx)
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)))
-        .style(Style::default().fg(Color::Gray))
-        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
-    frame.render_widget(tabs, sections[1]);
 
     let body = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(72), Constraint::Percentage(28)])
-        .split(sections[2]);
+        .split(sections[1]);
 
     let history_height = body[0].height.saturating_sub(2) as usize;
-    let history_text = app.visible_history(history_height).join("\n");
-    let history = Paragraph::new(history_text)
+    let history_lines = app
+        .visible_history(history_height)
+        .into_iter()
+        .map(|line| {
+            Line::from(Span::styled(
+                line.text,
+                Style::default().fg(history_color_for_kind(theme, line.kind)),
+            ))
+        })
+        .collect::<Vec<_>>();
+    let history = Paragraph::new(history_lines)
         .block(
             Block::default()
                 .title("Command History")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Blue)),
+                .border_style(Style::default().fg(theme.history_border)),
         )
-        .style(Style::default().fg(Color::Cyan));
+        .style(Style::default().fg(theme.history_text));
     frame.render_widget(history, body[0]);
 
-    let side_text = match app.tab_idx {
-        0 => vec![
-            "Quick Commands:",
-            "PING",
-            "KEYS *",
-            "SET mykey hello",
-            "GET mykey",
-            "INCR counter",
-            "LPUSH list item",
-            "ZRANGE board 0 -1",
-        ],
-        1 => vec![
-            "Command Tab:",
-            "Use this to discover commands.",
-            "Try:",
-            "AUTH <password>",
-            "XADD mystream * field value",
-            "XRANGE mystream - +",
-            "SUBSCRIBE channel",
-        ],
-        _ => vec![
-            "Monitor Tab:",
-            "This panel can show metrics later.",
-            "Suggested next additions:",
-            "- ops/sec",
-            "- memory usage",
-            "- connected clients",
-        ],
-    }
+    let side_text = vec![
+        "Quick Commands:",
+        "PING",
+        "KEYS *",
+        "SET mykey hello",
+        "GET mykey",
+        "INCR counter",
+        "LPUSH list item",
+        "ZRANGE board 0 -1",
+    ]
     .join("\n");
 
     let side = Paragraph::new(side_text)
@@ -303,29 +554,66 @@ fn ui(frame: &mut ratatui::Frame, app: &App) {
             Block::default()
                 .title("Quick Reference")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Green)),
+                .border_style(Style::default().fg(theme.side_border)),
         )
-        .style(Style::default().fg(Color::White));
+        .style(Style::default().fg(theme.side_text));
     frame.render_widget(side, body[1]);
 
     let mode_label = if app.input_mode { "INPUT" } else { "NORMAL" };
     let input = Paragraph::new(app.input.as_str()).block(
         Block::default()
-            .title(format!("{} - press i to type, Esc to stop", mode_label))
+            .title(format!(
+                "{} - press i to type, Esc to stop, Ctrl+T/F2 to change theme",
+                mode_label
+            ))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow)),
+            .border_style(Style::default().fg(theme.input_border)),
     );
-    frame.render_widget(input, sections[3]);
+    let input = input.style(Style::default().fg(theme.input_text));
+    frame.render_widget(input, sections[2]);
 
     if app.input_mode {
-        let x = sections[3].x + app.input.len() as u16 + 1;
-        let y = sections[3].y + 1;
+        let x = sections[2].x + app.input.len() as u16 + 1;
+        let y = sections[2].y + 1;
         frame.set_cursor_position((x, y));
     }
 
-    let status = Paragraph::new(app.status.as_str())
-        .style(Style::default().fg(if app.connected { Color::Green } else { Color::Red }));
-    frame.render_widget(status, sections[4]);
+    let mut status_line = app.status.clone();
+    if app.input_mode {
+        if let Some(hint) = command_hint(&app.input) {
+            status_line = format!("{} | Hint: {}", status_line, hint);
+        }
+    }
+
+    let status = Paragraph::new(status_line)
+        .style(Style::default().fg(if app.connected {
+            theme.status_connected
+        } else {
+            theme.status_disconnected
+        }));
+    frame.render_widget(status, sections[3]);
+}
+
+fn history_color_for_kind(theme: &Theme, kind: HistoryKind) -> Color {
+    match kind {
+        HistoryKind::Info => theme.history_text,
+        HistoryKind::Command => theme.cmd_text,
+        HistoryKind::Ok => theme.ok_text,
+        HistoryKind::Error => theme.err_text,
+        HistoryKind::Integer => theme.int_text,
+        HistoryKind::Nil => theme.nil_text,
+        HistoryKind::Value => theme.history_text,
+        HistoryKind::Muted => theme.muted_text,
+    }
+}
+
+fn command_hint(input: &str) -> Option<&'static str> {
+    let token = tokenize(input).into_iter().next()?;
+    let command = token.to_ascii_uppercase();
+    COMMAND_CATALOG
+        .iter()
+        .find(|(name, _)| *name == command)
+        .map(|(_, hint)| *hint)
 }
 
 fn serialize_command(input: &str) -> Result<String> {
@@ -431,32 +719,56 @@ fn expect_crlf(stream: &mut TcpStream) -> Result<()> {
     }
 }
 
-fn format_resp_value(value: &RespValue, indent: usize) -> Vec<String> {
+fn format_resp_value(value: &RespValue, indent: usize) -> Vec<HistoryLine> {
     let pad = "  ".repeat(indent);
     match value {
-        RespValue::SimpleString(s) => vec![format!("{}{}", pad, s)],
-        RespValue::Error(s) => vec![format!("{}(error) {}", pad, s)],
-        RespValue::Integer(i) => vec![format!("{}(integer) {}", pad, i)],
-        RespValue::BulkString(s) => vec![format!("{}{}", pad, s)],
-        RespValue::NullBulk => vec![format!("{}(nil)", pad)],
-        RespValue::NullArray => vec![format!("{}(null array)", pad)],
+        RespValue::SimpleString(s) => vec![HistoryLine {
+            text: format!("{}{}", pad, s),
+            kind: HistoryKind::Ok,
+        }],
+        RespValue::Error(s) => vec![HistoryLine {
+            text: format!("{}(error) {}", pad, s),
+            kind: HistoryKind::Error,
+        }],
+        RespValue::Integer(i) => vec![HistoryLine {
+            text: format!("{}(integer) {}", pad, i),
+            kind: HistoryKind::Integer,
+        }],
+        RespValue::BulkString(s) => vec![HistoryLine {
+            text: format!("{}{}", pad, s),
+            kind: HistoryKind::Value,
+        }],
+        RespValue::NullBulk => vec![HistoryLine {
+            text: format!("{}(nil)", pad),
+            kind: HistoryKind::Nil,
+        }],
+        RespValue::NullArray => vec![HistoryLine {
+            text: format!("{}(null array)", pad),
+            kind: HistoryKind::Nil,
+        }],
         RespValue::Array(items) => {
             let mut out = Vec::new();
             if items.is_empty() {
-                out.push(format!("{}(empty array)", pad));
+                out.push(HistoryLine {
+                    text: format!("{}(empty array)", pad),
+                    kind: HistoryKind::Nil,
+                });
                 return out;
             }
 
             for (idx, item) in items.iter().enumerate() {
                 match item {
                     RespValue::Array(_) => {
-                        out.push(format!("{}{})", pad, idx + 1));
+                        out.push(HistoryLine {
+                            text: format!("{}{})", pad, idx + 1),
+                            kind: HistoryKind::Muted,
+                        });
                         out.extend(format_resp_value(item, indent + 1));
                     }
                     _ => {
                         let mut lines = format_resp_value(item, 0);
                         if let Some(first) = lines.first_mut() {
-                            *first = format!("{}{}) {}", pad, idx + 1, first);
+                            first.text = format!("{}{}) {}", pad, idx + 1, first.text);
                         }
                         out.extend(lines);
                     }
