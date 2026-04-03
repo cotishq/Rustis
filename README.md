@@ -2,6 +2,10 @@
 
 A Redis clone built from scratch in Rust. This project implements core Redis functionality including data structures, persistence, replication, pub/sub messaging, and more.
 
+## 🚀 Demo
+
+[![Watch the demo](https://img.youtube.com/vi/NbdJff_rRMY/0.jpg)](https://youtu.be/NbdJff_rRMY)
+
 ## Features
 
 ### Data Structures
