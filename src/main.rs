@@ -10,6 +10,7 @@ mod rdb;
 mod commands;
 mod replication;
 mod client;
+mod tui;
 
 use resp::Value;
 use db::{Db, ServerConfig, ServerRole};
@@ -18,14 +19,35 @@ use replication::handshake::perform_handshake;
 use client::ClientState;
 
 
-fn parse_args() -> (String, ServerConfig) {
+struct AppArgs {
+    port: String,
+    host: String,
+    config: ServerConfig,
+    tui_mode: bool,
+}
+
+fn parse_args() -> AppArgs {
     let args: Vec<String> = std::env::args().collect();
     let mut port = "6379".to_string();
+    let mut host = "127.0.0.1".to_string();
     let mut config = ServerConfig::default();
+    let mut tui_mode = false;
 
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
+            "--tui" => {
+                tui_mode = true;
+                i += 1;
+            }
+            "--host" => {
+                if i + 1 < args.len() {
+                    host = args[i + 1].clone();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
             "--port" => {
                 if i + 1 < args.len() {
                     port = args[i + 1].clone();
@@ -70,22 +92,35 @@ fn parse_args() -> (String, ServerConfig) {
         }
     }
 
-    (port, config)
+    AppArgs {
+        port,
+        host,
+        config,
+        tui_mode,
+    }
 }
 
 #[tokio::main]
 async fn main() {
-    let (port, config) = parse_args();
-    let listener = TcpListener::bind(format!("127.0.0.1:{}" ,port)).await.unwrap();
-    println!("Rustis server listening on 127.0.0.1:{}", port);
+    let args = parse_args();
+
+    if args.tui_mode {
+        if let Err(e) = tui::run(&args.host, &args.port) {
+            eprintln!("TUI error: {}", e);
+        }
+        return;
+    }
+
+    let listener = TcpListener::bind(format!("127.0.0.1:{}" ,args.port)).await.unwrap();
+    println!("Rustis server listening on 127.0.0.1:{}", args.port);
 
     // If replica mode, connect to master and perform handshake
-    if let ServerRole::Slave { ref master_host, master_port } = config.role {
-        let replica_port: u16 = port.parse().unwrap_or(6379);
+    if let ServerRole::Slave { ref master_host, master_port } = args.config.role {
+        let replica_port: u16 = args.port.parse().unwrap_or(6379);
         tokio::spawn(perform_handshake(master_host.clone(), master_port, replica_port));
     }
 
-    let store = Db::new(config);
+    let store = Db::new(args.config);
 
     loop {
         match listener.accept().await {
