@@ -151,12 +151,6 @@ async fn handle_connection(stream: TcpStream, db: Db) -> Result<()> {
     loop {
         // Check for pubsub messages if subscribed
         if client.is_subscribed() {
-            // First, process any remaining data in the buffer before waiting
-            if !buffer.is_empty() {
-                process_buffer(&mut buffer, &mut writer, &db, &mut client).await?;
-                writer.flush().await?;
-                continue;
-            }
             tokio::select! {
                 // Wait for pubsub messages
                 Some(msg) = client.pubsub_rx.recv() => {
@@ -186,11 +180,6 @@ async fn handle_connection(stream: TcpStream, db: Db) -> Result<()> {
             }
         } else {
             // Not subscribed - simple read loop
-            // First, process any remaining data in the buffer
-            if !buffer.is_empty() {
-                process_buffer(&mut buffer, &mut writer, &db, &mut client).await?;
-                continue;
-            }
             let n = reader.read_buf(&mut buffer).await?;
             if n == 0 {
                 println!("Connection closed");

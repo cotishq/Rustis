@@ -50,13 +50,25 @@ fn parse_bulk_string(buffer: BytesMut) -> Result<(Value, usize)> {
         return Err(anyhow::anyhow!("Invalid bulk string format {:?}", buffer));
     };
 
-    let end_of_bulk_str = bytes_consumed + bulk_str_len as usize;
+    if bulk_str_len == -1 {
+        return Ok((Value::NullBulk, bytes_consumed));
+    }
+    if bulk_str_len < 0 {
+        return Err(anyhow::anyhow!("Invalid bulk string length"));
+    }
+
+    let bulk_str_len = bulk_str_len as usize;
+    let end_of_bulk_str = bytes_consumed + bulk_str_len;
     let total_parsed = end_of_bulk_str + 2;
 
-    Ok((
-        Value::BulkString(String::from_utf8(buffer[bytes_consumed..end_of_bulk_str].to_vec())?),
-        total_parsed,
-    ))
+    if buffer.len() < total_parsed {
+        return Err(anyhow::anyhow!("Incomplete bulk string data"));
+    }
+
+    let data = &buffer[bytes_consumed..end_of_bulk_str];
+    let s = String::from_utf8(data.to_vec())?;
+
+    Ok((Value::BulkString(s), total_parsed))
 }
 
 fn read_until_crlf(buffer: &[u8]) -> Option<(&[u8], usize)> {
